@@ -16,13 +16,11 @@ The look is a performance-car cockpit: a carbon-fibre dock of app tiles, graphit
 
 **Driving lock:** above about 10 km/h (6 mph), typing is disabled and the screen asks you to use your voice. Passenger mode turns this off.
 
-## Hosting it (free, with GitHub Pages)
+## Where it lives
 
-GPS and the microphone only work over **HTTPS**, and GitHub Pages provides that for free.
+**Live app:** https://mytkollij-lab.github.io/drivedeck/ (open it on your phone and choose *Add to Home Screen*).
 
-1. In this repository on GitHub, open **Settings → Pages**.
-2. Under **Build and deployment**, set **Source** to **Deploy from a branch**, choose **main** and **/ (root)**, then **Save**.
-3. After a minute or two the page shows your address, e.g. `https://<your-username>.github.io/drivedeck/`.
+It's hosted free on GitHub Pages, which provides the HTTPS that GPS and the microphone need. The site is published from the **`gh-pages`** branch, so to update the live app, push the same commit to both `main` and `gh-pages`.
 
 Any static host works too (Netlify, Cloudflare Pages, Render Static Site): publish the repository root as-is.
 
