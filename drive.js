@@ -1645,7 +1645,9 @@
     },
     hint() {
       const ua = navigator.userAgent;
-      if (/iPhone|iPad|iPod/.test(ua)) return 'In Safari, tap Share, then “Add to Home Screen”.';
+      // iPads report themselves as a Mac in Safari; touch support gives them away.
+      const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+      if (/iPhone|iPad|iPod/.test(ua) || iPadOS) return 'In Safari, tap the Share button (the square with an arrow), then “Add to Home Screen”.';
       if (/Android/.test(ua)) return 'Open the browser menu (⋮) and tap “Install app” or “Add to Home screen”.';
       if (/Firefox\//.test(ua)) return 'Firefox can’t install web apps. Open this page in Chrome or Edge, then press Install.';
       if (/Macintosh/.test(ua) && /Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) return 'In Safari, choose File › Add to Dock.';

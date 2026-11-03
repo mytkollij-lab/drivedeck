@@ -547,6 +547,20 @@ button.card:active { transform: scale(0.985); }
 .is-locked [data-lock-label] { opacity: 0.35; pointer-events: none; }
 .is-locked .pad button, .is-locked #dialCall { opacity: 0.35; }
 
+/* ---------------------------------------------------------------- tablet landscape (e.g. iPad Air 1180 px) */
+@media (max-width: 1300px) and (orientation: landscape) {
+  .card-media { padding: 20px 22px; }
+  .art-md { width: 96px; height: 96px; font-size: 40px; }
+  .art-md .ic { width: 42px; height: 42px; }
+  .media-top { gap: 16px; }
+  .media-title { font-size: 23px; }
+  .media-sub { font-size: 16px; }
+  .mini { gap: 10px; padding: 10px 12px; }
+  .mini-icon { width: 44px; height: 44px; }
+  .mini-title { font-size: 17px; }
+  .mini-sub { font-size: 14px; }
+}
+
 /* ---------------------------------------------------------------- mid-size landscape */
 @media (max-width: 1100px) and (orientation: landscape) {
   .cards { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); }
