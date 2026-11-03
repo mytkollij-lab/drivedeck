@@ -158,6 +158,7 @@
         if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
       });
       $('#stage').dataset.view = name;
+      if (name !== 'home' && photoFrame.adjusting) photoFrame.exit();
       bus.emit('view', name);
     },
     toast(msg, ms = 3000) {
@@ -1531,6 +1532,8 @@
     const url = wallpaper.get();
     $('#carPhoto').style.backgroundImage = url ? `url("${url}")` : '';
     $('#carPhoto').classList.toggle('has-photo', !!url);
+    $('#carPhotoAdjust').hidden = !url;
+    $('#wallpaperAdjust').disabled = !url;
     $('#carReminders').innerHTML = rem.length
       ? rem.map((r) => `<li class="rem${r.days < 0 ? ' is-alert' : r.days <= 30 ? ' is-warn' : ''}"><span>${esc(r.label)}</span><b>${esc(dueText(r.days, r.iso))}</b></li>`).join('')
       : '<li class="rem-empty">Add service, inspection and insurance dates and DriveDeck will remind you when they’re due.</li>';
@@ -1663,6 +1666,7 @@
       photo.style.backgroundImage = url ? `url("${url}")` : '';
       $('#skyline').hidden = !!url;
       if (!url) skyline.draw();
+      photoFrame.setImage(url);
       renderCar();
     },
     async pick(file) {
@@ -1670,12 +1674,153 @@
       let url;
       try { url = await shrinkImage(file, 1600, 0.82); } catch (e) { ui.toast('Couldn’t read that photo.'); return; }
       try { localStorage.setItem(WP_KEY, url); } catch (e) { ui.toast('That photo is too big to save. Try a smaller one.'); return; }
+      photoFrame.resetPos();
       this.apply();
-      ui.toast('Wallpaper updated.');
+      photoFrame.enter(); // straight into positioning so you can frame the new photo
     },
     reset() {
       try { localStorage.removeItem(WP_KEY); } catch (e) { /* noop */ }
+      photoFrame.resetPos();
       this.apply();
+    },
+  };
+
+  // Drag / pinch / slider to choose which part of the wallpaper photo shows.
+  // Position is stored as the photo point at the screen centre (cx, cy: 0..1) plus a zoom factor.
+  const WP_POS_KEY = 'drivedeck:wallpaper-pos';
+  const DEFAULT_POS = { cx: 0.5, cy: 0.6, zoom: 1 };
+  const photoFrame = {
+    img: null,
+    pos: { ...DEFAULT_POS },
+    adjusting: false,
+    pointers: new Map(),
+    pinch: null,
+    loadPos() {
+      try {
+        const p = JSON.parse(localStorage.getItem(WP_POS_KEY) || 'null');
+        if (p && [p.cx, p.cy, p.zoom].every(Number.isFinite)) this.pos = { cx: clamp(p.cx, 0, 1), cy: clamp(p.cy, 0, 1), zoom: clamp(p.zoom, 1, 3) };
+      } catch (e) { /* keep default */ }
+    },
+    savePos() { try { localStorage.setItem(WP_POS_KEY, JSON.stringify(this.pos)); } catch (e) { /* noop */ } },
+    resetPos() {
+      this.pos = { ...DEFAULT_POS };
+      try { localStorage.removeItem(WP_POS_KEY); } catch (e) { /* noop */ }
+    },
+    setImage(url) {
+      this.img = null;
+      if (!url) return;
+      const im = new Image();
+      im.onload = () => { this.img = im; this.layout(); };
+      im.src = url;
+    },
+    geometry() {
+      const el = $('#wallpaperPhoto');
+      const W = el.clientWidth;
+      const H = el.clientHeight;
+      if (!this.img || !W || !H) return null;
+      const iw = this.img.naturalWidth;
+      const ih = this.img.naturalHeight;
+      const s = Math.max(W / iw, H / ih) * this.pos.zoom; // "cover", then zoom
+      return { W, H, rw: iw * s, rh: ih * s };
+    },
+    layout() {
+      const g = this.geometry();
+      if (!g) return;
+      // keep the photo covering the whole screen while honouring the chosen centre
+      const left = clamp(g.W / 2 - this.pos.cx * g.rw, g.W - g.rw, 0);
+      const top = clamp(g.H / 2 - this.pos.cy * g.rh, g.H - g.rh, 0);
+      this.pos.cx = (g.W / 2 - left) / g.rw;
+      this.pos.cy = (g.H / 2 - top) / g.rh;
+      const el = $('#wallpaperPhoto');
+      el.style.backgroundSize = `${g.rw.toFixed(1)}px ${g.rh.toFixed(1)}px`;
+      el.style.backgroundPosition = `${left.toFixed(1)}px ${top.toFixed(1)}px`;
+      $('#carPhoto').style.backgroundPosition = `${(this.pos.cx * 100).toFixed(1)}% ${(this.pos.cy * 100).toFixed(1)}%`;
+    },
+    moveBy(dx, dy) {
+      const g = this.geometry();
+      if (!g) return;
+      this.pos.cx -= dx / g.rw;
+      this.pos.cy -= dy / g.rh;
+      this.layout();
+    },
+    zoomTo(z) {
+      this.pos.zoom = clamp(z, 1, 3);
+      this.layout();
+      $('#wpZoom').value = String(this.pos.zoom);
+    },
+    enter() {
+      if (!wallpaper.get()) { ui.toast('Choose a photo first: My Car › Use a photo of my car.'); return; }
+      if (ui.view !== 'home') ui.show('home');
+      this.adjusting = true;
+      $('#stage').classList.add('is-adjusting');
+      $('#wpAdjust').hidden = false;
+      $('#wpZoom').value = String(this.pos.zoom);
+      this.layout();
+    },
+    exit() {
+      this.adjusting = false;
+      this.pointers.clear();
+      this.pinch = null;
+      $('#stage').classList.remove('is-adjusting');
+      $('#wpAdjust').hidden = true;
+      this.savePos();
+      ui.toast('Photo position saved.');
+    },
+    wire() {
+      const surf = $('#wpAdjust');
+      const pts = () => [...this.pointers.values()];
+      surf.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.wp-bar')) return;
+        try { surf.setPointerCapture(e.pointerId); } catch (err) { /* older Safari */ }
+        this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (this.pointers.size === 2) {
+          const [a, b] = pts();
+          this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: this.pos.zoom };
+        }
+      });
+      surf.addEventListener('pointermove', (e) => {
+        const p = this.pointers.get(e.pointerId);
+        if (!p) return;
+        const dx = e.clientX - p.x;
+        const dy = e.clientY - p.y;
+        this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (this.pointers.size === 1) this.moveBy(dx, dy);
+        else if (this.pinch && this.pointers.size === 2) {
+          const [a, b] = pts();
+          this.zoomTo(this.pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / this.pinch.d));
+        }
+      });
+      const end = (e) => {
+        this.pointers.delete(e.pointerId);
+        if (this.pointers.size < 2) this.pinch = null;
+      };
+      surf.addEventListener('pointerup', end);
+      surf.addEventListener('pointercancel', end);
+      surf.addEventListener('wheel', (e) => {
+        if (e.target.closest('.wp-bar')) return;
+        e.preventDefault();
+        this.zoomTo(this.pos.zoom * (e.deltaY < 0 ? 1.06 : 1 / 1.06));
+      }, { passive: false });
+      $('#wpZoom').addEventListener('input', (e) => this.zoomTo(Number(e.target.value)));
+      $('#wpReset').addEventListener('click', () => { this.pos = { ...DEFAULT_POS }; this.zoomTo(1); });
+      $('#wpDone').addEventListener('click', () => this.exit());
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.adjusting) this.exit(); });
+
+      // Press and hold the open sky on the home screen to reposition the photo.
+      const hero = $('.hero');
+      let hold = null;
+      let startPt = null;
+      const cancel = () => { clearTimeout(hold); hold = null; };
+      hero.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button, a, input') || !wallpaper.get()) return;
+        startPt = { x: e.clientX, y: e.clientY };
+        cancel();
+        hold = setTimeout(() => { hold = null; this.enter(); }, 600);
+      });
+      hero.addEventListener('pointermove', (e) => {
+        if (hold && startPt && Math.hypot(e.clientX - startPt.x, e.clientY - startPt.y) > 12) cancel();
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => hero.addEventListener(ev, cancel));
     },
   };
 
@@ -1795,6 +1940,10 @@
     $('#carCard').addEventListener('click', () => ui.show('car'));
     $('#carOpen').addEventListener('click', () => ui.show('car'));
     $('#carPhotoBtn').addEventListener('click', () => $('#wallpaperInput').click());
+    $('#carPhotoAdjust').addEventListener('click', () => photoFrame.enter());
+    $('#carPhoto').addEventListener('click', () => { if (wallpaper.get()) photoFrame.enter(); });
+    $('#wallpaperAdjust').addEventListener('click', () => photoFrame.enter());
+    photoFrame.wire();
     $('#carForm').addEventListener('submit', (e) => e.preventDefault());
     $('#carForm').addEventListener('input', (e) => {
       const el = e.target;
@@ -2059,13 +2208,14 @@
     renderWeather();
     renderSettings();
     renderBadge();
+    photoFrame.loadPos();
     wallpaper.apply();
     renderCar();
     setInterval(renderCar, 60 * 60e3); // keep "due in N days" current
     safety.apply();
 
     let resizeTimer = null;
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => skyline.draw(), 200); });
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { skyline.draw(); photoFrame.layout(); }, 200); });
     setInterval(renderClock, 1000);
     setInterval(() => { if (state.settings.theme === 'auto') ui.applyTheme(); }, 60e3);
 
@@ -2077,7 +2227,7 @@
     wake.sync();
 
     // Debug/test hook (harmless in production).
-    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, installer, setSetting };
+    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, photoFrame, installer, setSetting };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

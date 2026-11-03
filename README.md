@@ -7,6 +7,7 @@ The home screen is a photo dashboard: a full-width wallpaper (a dusk city skylin
 | Screen | What it does |
 | --- | --- |
 | **Home** | Wallpaper hero with your name, weather, date and clock; cards for now playing, the voice assistant, a live map (tap to navigate), speed and trip, wallpaper and settings |
+| **Wallpaper photo** | Pick any photo, then drag it to choose which part shows and pinch (or use the slider) to zoom. To reposition later, press and hold the sky on the home screen, or use *Adjust* in Settings or My Car |
 | **My Car** | Your car's model, year, plate, mileage and tyre pressures, with reminders for the service, inspection/MOT and insurance. The home card shows what's due next, and you can ask "when is my service?" |
 | **Maps** | OpenStreetMap with follow mode, place search, routing, **spoken turn-by-turn directions with automatic rerouting**, and hand-off to Google Maps, Waze or Apple Maps |
 | **Audio** | Plays music files from the device and internet radio streams. Bluetooth and steering-wheel buttons work through the Media Session API, and music is lowered while directions are spoken |

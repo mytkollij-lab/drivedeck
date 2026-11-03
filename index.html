@@ -90,6 +90,17 @@
       <div class="wallpaper-shade"></div>
     </div>
 
+    <!-- Photo positioning: drag to move, pinch or slider to zoom -->
+    <div class="wp-adjust" id="wpAdjust" hidden>
+      <div class="wp-grid" aria-hidden="true"></div>
+      <div class="wp-bar" role="group" aria-label="Position your photo">
+        <span class="wp-hint">Drag the photo to move it · pinch or slide to zoom</span>
+        <label class="wp-zoom"><span>Zoom</span><input type="range" id="wpZoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom"></label>
+        <button class="btn btn-sm" id="wpReset">Reset</button>
+        <button class="btn btn-sm btn-go" id="wpDone">Done</button>
+      </div>
+    </div>
+
     <!-- Turn-by-turn banner (visible on every screen while navigating) -->
     <section class="guide" id="guide" hidden aria-live="polite">
       <div class="guide-turn">
@@ -188,7 +199,10 @@
             <div class="car-photo" id="carPhoto"><svg class="ic"><use href="#i-car"/></svg></div>
             <div class="car-hero-name" id="carHeroName">My Car</div>
             <div class="car-hero-sub" id="carHeroSub">Add your car’s details</div>
-            <button class="btn" id="carPhotoBtn" data-lock><svg class="ic"><use href="#i-image"/></svg>Use a photo of my car</button>
+            <div class="car-photo-btns">
+              <button class="btn" id="carPhotoBtn" data-lock><svg class="ic"><use href="#i-image"/></svg>Use a photo of my car</button>
+              <button class="btn" id="carPhotoAdjust" data-lock hidden>Adjust photo</button>
+            </div>
             <ul class="reminders" id="carReminders"></ul>
           </article>
           <article class="tile">
@@ -365,6 +379,7 @@
             <span>Wallpaper<small id="wallpaperState">Built-in city skyline</small></span>
             <div class="set-btns">
               <button class="btn btn-sm" id="wallpaperPick">Choose photo</button>
+              <button class="btn btn-sm" id="wallpaperAdjust">Adjust</button>
               <button class="btn btn-sm" id="wallpaperReset">Use default</button>
             </div>
           </div>
