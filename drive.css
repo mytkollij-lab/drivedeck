@@ -401,8 +401,8 @@ button.card:active { transform: scale(0.985); }
 /* Leaflet 1.9 blends tiles with "plus-lighter"; Safari can render them invisible inside
    composited/blurred containers, so draw tiles normally. */
 .leaflet-container img.leaflet-tile { mix-blend-mode: normal; }
-/* Fallback OpenStreetMap tiles are light; darken them at night. */
-:root:not([data-theme="day"]) .osm-tiles .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55); }
+/* OpenStreetMap tiles are light; at night turn them into a dark map. */
+:root:not([data-theme="day"]) .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.92) saturate(0.45); }
 .tiles-failed::after {
   content: "Map images can't load right now";
   position: absolute; inset: 0; z-index: 401; display: grid; place-items: center; padding: 16px; text-align: center;

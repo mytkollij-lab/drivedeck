@@ -670,21 +670,20 @@
   }
 
   // ------------------------------------------------------------------ map
-  const TILES = {
-    night: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    day: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  };
-  const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> '
-    + '&copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+  // Map images come straight from OpenStreetMap: free, no API key or sign-up.
+  // (Night mode darkens them with a CSS filter; see .leaflet-tile-pane in drive.css.)
+  const TILE_SOURCES = [
+    { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, subdomains: 'abc' },
+    // Backup: OpenStreetMap France's "Humanitarian" style, used only if the main server can't be reached.
+    { url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', maxZoom: 19, subdomains: 'abc' },
+  ];
+  const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
   const themeName = () => (document.documentElement.dataset.theme === 'day' ? 'day' : 'night');
-  const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 
-  // Base map tiles: CARTO's dark/light styles, falling back to standard OpenStreetMap
-  // tiles if CARTO can't be reached (blocked network, content blocker, outage).
   function addBaseTiles(map) {
-    const layer = L.tileLayer(TILES[themeName()], { maxZoom: 20, subdomains: 'abcd', attribution: TILE_ATTR }).addTo(map);
-    layer.dd = { osm: false, loaded: 0, failed: 0, warned: false };
+    const first = TILE_SOURCES[0];
+    const layer = L.tileLayer(first.url, { maxZoom: first.maxZoom, subdomains: first.subdomains, attribution: TILE_ATTR }).addTo(map);
+    layer.dd = { source: 0, loaded: 0, failed: 0, warned: false };
     layer.on('tileload', () => {
       layer.dd.loaded++;
       map.getContainer().classList.remove('tiles-failed');
@@ -692,14 +691,15 @@
     layer.on('tileerror', () => {
       const d = layer.dd;
       d.failed++;
-      if (!d.osm && d.loaded === 0 && d.failed >= 3) {
-        d.osm = true;
+      if (d.loaded > 0 || d.failed < 4) return;
+      if (d.source + 1 < TILE_SOURCES.length) {
+        d.source++;
         d.failed = 0;
-        map.getContainer().classList.add('osm-tiles');
-        if (map.attributionControl) map.attributionControl.removeAttribution(TILE_ATTR).addAttribution(OSM_ATTR);
-        layer.options.maxZoom = 19;
-        layer.setUrl(OSM_URL);
-      } else if (d.osm && d.loaded === 0 && d.failed >= 6 && !d.warned) {
+        const next = TILE_SOURCES[d.source];
+        layer.options.subdomains = next.subdomains;
+        layer.options.maxZoom = next.maxZoom;
+        layer.setUrl(next.url);
+      } else if (!d.warned) {
         d.warned = true;
         map.getContainer().classList.add('tiles-failed');
         ui.toast('Map images can’t load. Check your internet connection, or turn off content blockers for this site.', 7000);
@@ -707,9 +707,7 @@
     });
     return layer;
   }
-  function rethemeTiles(layer) {
-    if (layer && !layer.dd.osm) layer.setUrl(TILES[themeName()]);
-  }
+  function rethemeTiles() { /* tiles are the same by day and night; CSS handles the dark look */ }
   const CAR_HTML = '<div class="car"><svg viewBox="0 0 24 24"><path d="M12 2.5l7.5 18.5-7.5-4.2-7.5 4.2z"/></svg></div>';
 
   function carMarker(ll) {

@@ -49,12 +49,12 @@ DriveDeck installs straight from the website, with nothing to download. You get 
 
 ## Services used (free, no keys)
 
-- Map tiles: CARTO basemaps (dark and light) built on OpenStreetMap data
+- Map tiles: OpenStreetMap (darkened in night mode), with OpenStreetMap France as a backup
 - Place search: Nominatim
 - Routing: OSRM public demo server (`router.project-osrm.org`)
 - Weather: Open-Meteo (town name from Nominatim)
 
-These public servers are fine for personal use, but they have fair-use limits and no uptime guarantee. CARTO's free basemaps are for non-commercial use. For anything beyond one car, self-host OSRM and a tile server, or switch to a paid provider. The URLs are all in `drive.js`.
+These public servers are fine for personal use, but they have fair-use limits and no uptime guarantee. OpenStreetMap's tile servers are for light, personal use. For anything beyond one car, self-host OSRM and a tile server, or switch to a paid provider. The URLs are all in `drive.js`.
 
 ## Files
 
