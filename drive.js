@@ -13,6 +13,7 @@
 (() => {
   'use strict';
 
+  const APP_VERSION = 'Build 9 · 3 Nov 2026';
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -1016,53 +1017,106 @@
     player: null,
     apiPromise: null,
     ready: false,
+    fallback: false,     // plain embedded video (no remote control) when the player API won't start
     pending: null,
     state: -1,
     title: '',
+    watchdog: null,
+    nudged: false,
     loadApi() {
       if (window.YT && window.YT.Player) return Promise.resolve();
       if (this.apiPromise) return this.apiPromise;
       this.apiPromise = new Promise((resolve, reject) => {
         const prev = window.onYouTubeIframeAPIReady;
         window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); resolve(); };
-        const s = document.createElement('script');
-        s.src = 'https://www.youtube.com/iframe_api';
-        s.async = true;
-        s.onerror = () => { this.apiPromise = null; reject(new Error('blocked')); };
-        document.head.appendChild(s);
+        const s2 = document.createElement('script');
+        s2.src = 'https://www.youtube.com/iframe_api';
+        s2.async = true;
+        s2.onerror = () => { this.apiPromise = null; reject(new Error('blocked')); };
+        document.head.appendChild(s2);
+        setTimeout(() => reject(new Error('timeout')), 10000);
       });
       return this.apiPromise;
     },
     async load(item) {
       this.title = '';
+      this.nudged = false;
       $('#ytDock').hidden = false;
       requestAnimationFrame(() => ytDock.place());
+      if (this.fallback) { this.embed(item); return; }
       try {
         await this.loadApi();
       } catch (e) {
-        ui.toast('YouTube couldn’t load. Check your connection, or turn off content blockers for this site.', 6000);
+        this.embed(item); // the player API is blocked or slow: show a plain YouTube video instead
         return;
       }
       if (media.current !== item) return; // switched to something else meanwhile
-      if (!this.player) {
-        this.pending = item;
-        this.player = new window.YT.Player('ytPlayer', {
-          width: '100%',
-          height: '100%',
-          host: 'https://www.youtube-nocookie.com',
-          playerVars: { playsinline: 1, rel: 0 },
-          events: {
-            onReady: () => {
-              this.ready = true;
-              if (this.pending) { this.cue(this.pending); this.pending = null; }
-            },
-            onStateChange: (e) => { this.state = e.data; this.refreshTitle(); bus.emit('media'); },
-            onError: () => ui.toast('That YouTube item can’t play here. It may be private, or its owner only allows it on YouTube.', 6000),
+      if (this.player && this.ready) { this.cue(item); this.nudgeIfStuck(); return; }
+      if (this.player) { this.pending = item; return; }
+      // Create the player already holding this playlist/song, so it shows even before the API answers.
+      const y = item.yt;
+      const vars = { playsinline: 1, rel: 0, origin: location.origin };
+      if (y.kind === 'playlist') { vars.listType = 'playlist'; vars.list = y.list; }
+      const opts = {
+        width: '100%',
+        height: '100%',
+        playerVars: vars,
+        events: {
+          onReady: () => {
+            clearTimeout(this.watchdog);
+            this.ready = true;
+            if (this.pending && this.pending !== item) this.cue(this.pending);
+            else this.player.playVideo(); // may be blocked until you tap the video (iPad/iPhone rule)
+            this.pending = null;
+            this.nudgeIfStuck();
           },
-        });
+          onStateChange: (e) => { this.state = e.data; this.refreshTitle(); bus.emit('media'); },
+          onError: () => ui.toast('That YouTube item can’t play here. It may be private, or its owner only allows it on YouTube.', 6000),
+        },
+      };
+      if (y.kind === 'video') opts.videoId = y.v;
+      try {
+        this.player = new window.YT.Player('ytPlayer', opts);
+      } catch (e) {
+        this.embed(item);
         return;
       }
-      if (this.ready) this.cue(item); else this.pending = item;
+      clearTimeout(this.watchdog);
+      this.watchdog = setTimeout(() => { if (!this.ready) this.embed(media.isYouTube() ? media.current : item); }, 7000);
+    },
+    // Plain YouTube embed: always plays when tapped, but DriveDeck's buttons can't control it.
+    embed(item) {
+      clearTimeout(this.watchdog);
+      this.fallback = true;
+      this.ready = false;
+      this.player = null;
+      this.state = -1;
+      const y = item.yt;
+      const params = new URLSearchParams({ playsinline: '1', rel: '0' });
+      let src;
+      if (y.kind === 'playlist') { params.set('list', y.list); src = `https://www.youtube.com/embed/videoseries?${params}`; }
+      else src = `https://www.youtube.com/embed/${encodeURIComponent(y.v)}?${params}`;
+      const dock = $('#ytDock');
+      dock.innerHTML = '';
+      const f = document.createElement('iframe');
+      f.id = 'ytEmbed';
+      f.title = 'YouTube player';
+      f.src = src;
+      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.setAttribute('allowfullscreen', '');
+      dock.appendChild(f);
+      requestAnimationFrame(() => ytDock.place());
+      bus.emit('media');
+      ui.toast('Tap ▶ on the video to play. Use the video’s own buttons to pause or skip.', 6000);
+    },
+    // iPad/iPhone only start sound after a tap on the video itself the first time.
+    nudgeIfStuck() {
+      setTimeout(() => {
+        if (!this.nudged && media.isYouTube() && !this.isPlaying()) {
+          this.nudged = true;
+          ui.toast('Tap ▶ on the video to start it. After that, DriveDeck’s buttons work too.', 6000);
+        }
+      }, 2500);
     },
     cue(item) {
       const y = item.yt;
@@ -1075,14 +1129,20 @@
         if (d && d.title) this.title = d.title;
       } catch (e) { /* not ready */ }
     },
-    isPlaying() { return this.state === 1 || this.state === 3; }, // playing or buffering
-    play() { if (this.ready) this.player.playVideo(); },
-    pause() { if (this.ready) this.player.pauseVideo(); },
-    next() { if (this.ready) this.player.nextVideo(); },
-    prev() { if (this.ready) this.player.previousVideo(); },
+    isPlaying() { return !this.fallback && (this.state === 1 || this.state === 3); }, // playing or buffering
+    control(fn) {
+      if (this.fallback) { ui.toast('Use the buttons on the video for this one.'); return; }
+      if (this.ready) fn(this.player);
+      else ui.toast('YouTube is still loading…');
+    },
+    play() { this.control((p) => p.playVideo()); },
+    pause() { this.control((p) => p.pauseVideo()); },
+    next() { this.control((p) => p.nextVideo()); },
+    prev() { this.control((p) => p.previousVideo()); },
     setVolume(v) { if (this.ready && this.player.setVolume) this.player.setVolume(v); },
     hide() {
-      this.pause();
+      if (this.ready) this.player.pauseVideo();
+      if (this.fallback) { const f = $('#ytEmbed'); if (f) f.src = 'about:blank'; } // stop the plain embed
       this.pending = null;
       $('#ytDock').hidden = true;
     },
@@ -2378,6 +2438,7 @@
     renderPhone();
     renderWeather();
     renderSettings();
+    $('#appVersion').textContent = `DriveDeck ${APP_VERSION}`;
     renderBadge();
     photoFrame.loadPos();
     wallpaper.apply();

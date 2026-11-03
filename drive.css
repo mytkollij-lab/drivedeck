@@ -426,7 +426,9 @@ button.card:active { transform: scale(0.985); }
 .yt-slot-lg { max-width: 560px; }
 .yt-help { flex-basis: 100%; margin: 0; }
 .yt-dock { position: fixed; z-index: 1500; border-radius: 16px; overflow: hidden; background: #000; box-shadow: var(--shadow); }
-.yt-dock iframe { display: block; width: 100%; height: 100%; border: 0; }
+.yt-dock::before { content: "Loading YouTube…"; position: absolute; inset: 0; display: grid; place-items: center; color: #8a8f99; font-size: 14px; }
+.yt-dock iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
+.app-version { font-weight: 600; }
 .yt-dock.is-floating { right: 20px; bottom: 20px; width: 356px; height: 200px; border: 1px solid var(--edge-strong); }
 
 /* ---------------------------------------------------------------- map screen */
