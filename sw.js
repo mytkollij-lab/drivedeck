@@ -1,7 +1,7 @@
 /* DriveDeck service worker: lets the installed app open without a connection.
    Network first (so updates arrive as soon as you're online), cached copy as fallback.
    Only this app's own files are handled; maps, routing and weather go straight to the network. */
-const CACHE = 'drivedeck-v7';
+const CACHE = 'drivedeck-v8';
 const CORE = [
   './',
   'index.html',
@@ -33,10 +33,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const isVersionCheck = new URL(req.url).pathname.endsWith('/version.json');
   event.respondWith(
-    fetch(req)
+    // "no-cache" revalidates with the server every time, so a new release shows up on the next
+    // open instead of waiting out the browser cache.
+    fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && !isVersionCheck) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(req, copy));
         }

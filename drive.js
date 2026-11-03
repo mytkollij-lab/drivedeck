@@ -13,7 +13,8 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = 'Build 9 · 3 Nov 2026';
+  const APP_BUILD = 10;
+  const APP_VERSION = `Build ${APP_BUILD} · 3 Nov 2026`;
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -2130,6 +2131,27 @@
       : 'Add it to your computer or home screen';
   }
 
+  // Self-update: compare with version.json on the server; if newer, clear caches and reload once.
+  async function checkForUpdate({ manual = false } = {}) {
+    let remote = null;
+    try {
+      const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) remote = (await res.json()).build;
+    } catch (e) { /* offline */ }
+    if (!Number.isFinite(remote)) { if (manual) ui.toast('Couldn’t check for updates. Are you online?'); return; }
+    if (remote <= APP_BUILD) { if (manual) ui.toast(`You’re on the latest version (${APP_VERSION}).`); return; }
+    let already = null;
+    try { already = sessionStorage.getItem('drivedeck:updatedTo'); sessionStorage.setItem('drivedeck:updatedTo', String(remote)); } catch (e) { /* noop */ }
+    if (already === String(remote) && !manual) return; // don't loop if the server copy is lagging
+    ui.toast('Updating DriveDeck…', 4000);
+    try {
+      if (window.caches) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    } catch (e) { /* reload anyway */ }
+    setTimeout(() => location.reload(), 600);
+  }
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
     navigator.serviceWorker.register('sw.js').catch(() => { /* app still works online */ });
@@ -2346,6 +2368,7 @@
       location.reload();
     });
     $('#installBtn').addEventListener('click', () => installer.run());
+    $('#updateBtn').addEventListener('click', () => checkForUpdate({ manual: true }));
     $('#fullscreenBtn').addEventListener('click', () => {
       const el = document.documentElement;
       if (document.fullscreenElement) document.exitFullscreen?.();
@@ -2455,6 +2478,9 @@
     initBattery();
     installer.init();
     registerServiceWorker();
+    checkForUpdate();
+    // Home Screen apps on iPad often resume instead of restarting, so check again when coming back.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
     gps.start();
     wake.sync();
 
