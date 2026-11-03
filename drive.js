@@ -24,7 +24,9 @@
   // ------------------------------------------------------------------ storage
   const STORE_KEY = 'drivedeck:v1';
   const guessUnits = () => (/-(US|GB|LR|MM)$/i.test(navigator.language || '') ? 'imperial' : 'metric');
+  const CAR_FIELDS = ['model', 'year', 'plate', 'mileage', 'tyres', 'service', 'inspection', 'insurance', 'notes'];
   const DEFAULTS = {
+    car: Object.fromEntries(CAR_FIELDS.map((k) => [k, ''])),
     settings: { units: guessUnits(), theme: 'night', voiceGuidance: true, wakeLock: true, passenger: false, simulate: false, speechRate: 1, badgeTitle: 'DriveDeck', badgeSub: '' },
     favorites: [],
     stations: [],
@@ -40,6 +42,7 @@
       Object.assign(s.settings, raw.settings || {});
       for (const k of ['favorites', 'stations', 'recents']) if (Array.isArray(raw[k])) s[k] = raw[k];
       if (raw.places && typeof raw.places === 'object') Object.assign(s.places, raw.places);
+      if (raw.car && typeof raw.car === 'object') CAR_FIELDS.forEach((k) => { if (typeof raw.car[k] === 'string') s.car[k] = raw.car[k]; });
       if (!raw.v && s.settings.theme === 'auto') s.settings.theme = 'night'; // v2 look defaults to night
     }
     s.v = 2;
@@ -1038,7 +1041,7 @@
   };
 
   // ------------------------------------------------------------------ voice commands
-  const VIEW_ALIASES = { home: 'home', map: 'map', maps: 'map', navigation: 'map', music: 'music', audio: 'music', radio: 'music', phone: 'phone', settings: 'settings', setup: 'settings' };
+  const VIEW_ALIASES = { car: 'car', vehicle: 'car', home: 'home', map: 'map', maps: 'map', navigation: 'map', music: 'music', audio: 'music', radio: 'music', phone: 'phone', settings: 'settings', setup: 'settings' };
 
   const commands = {
     reply(msg) {
@@ -1051,7 +1054,7 @@
       let m;
       if (!text) return;
 
-      if ((m = text.match(/^(?:open|show|go to|switch to)(?: the)? (home|maps?|navigation|music|audio|radio|phone|settings|setup)(?: (?:screen|app|page))?$/))) {
+      if ((m = text.match(/^(?:open|show|go to|switch to)(?: the| my)? (car|vehicle|home|maps?|navigation|music|audio|radio|phone|settings|setup)(?: (?:screen|app|page))?$/))) {
         ui.show(VIEW_ALIASES[m[1]]);
         return;
       }
@@ -1071,6 +1074,7 @@
       if (/^(?:previous|back|go back)(?: (?:song|track|station))?$/.test(text)) { media.prev(); return; }
       if (/^(?:play|resume|unpause)(?: (?:the )?(?:music|audio|radio|something))?$/.test(text)) { media.play(); return; }
       if ((m = text.match(/^play (.+)$/))) { media.playByVoice(m[1], reply); return; }
+      if (/(my car|service|\bmot\b|inspection|insurance|mileage|tyre|tire)/.test(text)) { reply(carSentence()); return; }
       if (/(weather|temperature|outside|raining|snowing|cold|hot)/.test(text)) { reply(weather.sentence()); return; }
       if (/(what time|the time|what's the time)/.test(text)) { reply(`It's ${fmt.time(new Date())}.`); return; }
       if (/(how fast|my speed|what speed)/.test(text)) { reply(`You're doing ${fmt.speed(gps.pos?.speed)} ${imperial() ? 'miles per hour' : 'kilometers per hour'}.`); return; }
@@ -1171,6 +1175,7 @@
     save();
     switch (key) {
       case 'units':
+        renderCar();
         weather.lastAt = 0;
         if (gps.pos) weather.maybeRefresh(gps.pos);
         break;
@@ -1444,7 +1449,8 @@
   }
 
   function renderBadge() {
-    const t = (state.settings.badgeTitle || '').trim() || 'DriveDeck';
+    const custom = (state.settings.badgeTitle || '').trim();
+    const t = (custom && custom !== 'DriveDeck') ? custom : ((state.car.model || '').trim() || 'DriveDeck');
     const sub = (state.settings.badgeSub || '').trim();
     $('#badgeTitle').textContent = t;
     $('#badgeSub').textContent = sub;
@@ -1463,6 +1469,74 @@
     $('#homePlace').textContent = state.places.home ? state.places.home.name : 'Not set. Search a place and tap Save as Home.';
     $('#workPlace').textContent = state.places.work ? state.places.work.name : 'Not set. Search a place and tap Save as Work.';
     $$('[data-clear-place]').forEach((b) => { b.disabled = !state.places[b.dataset.clearPlace]; });
+  }
+
+  // ================================================================== MY CAR
+  const CAR_DATES = [['service', 'Service'], ['inspection', 'Inspection'], ['insurance', 'Insurance']];
+  function daysUntil(iso) {
+    if (!iso) return null;
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((d - today) / 864e5);
+  }
+  function dueText(days, iso) {
+    if (days < 0) return `overdue by ${-days} day${days === -1 ? '' : 's'}`;
+    if (days === 0) return 'due today';
+    if (days === 1) return 'due tomorrow';
+    if (days < 60) return `in ${days} days`;
+    return `on ${new Date(`${iso}T00:00:00`).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  }
+  // Compact wording for the small home card.
+  function shortDue(days, iso) {
+    if (days < 0) return 'overdue';
+    if (days === 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    if (days < 60) return `in ${days} days`;
+    return new Date(`${iso}T00:00:00`).toLocaleDateString([], { day: 'numeric', month: 'short' });
+  }
+  function carReminders() {
+    return CAR_DATES
+      .map(([k, label]) => ({ k, label, iso: state.car[k], days: daysUntil(state.car[k]) }))
+      .filter((r) => r.days != null)
+      .sort((a, b) => a.days - b.days);
+  }
+  function carMileage() {
+    const n = parseInt(String(state.car.mileage || '').replace(/[^\d]/g, ''), 10);
+    return Number.isFinite(n) ? `${n.toLocaleString()} ${imperial() ? 'mi' : 'km'}` : '';
+  }
+  function carSentence() {
+    const name = (state.car.model || '').trim();
+    const rem = carReminders();
+    if (!name && !rem.length) return 'Add your car on the My Car screen, and I’ll keep track of services and renewals.';
+    if (!rem.length) return `I don’t have any dates for your ${name} yet. Add them on the My Car screen.`;
+    return `${rem.map((r) => `${r.label} ${dueText(r.days, r.iso)}`).join('. ')}.`;
+  }
+  function renderCar() {
+    const c = state.car;
+    const name = (c.model || '').trim();
+    const rem = carReminders();
+    const next = rem[0];
+    const miles = carMileage();
+
+    $('#carCardTitle').textContent = name || 'My Car';
+    $('#carCardSub').textContent = next ? `${next.label} ${shortDue(next.days, next.iso)}` : (miles || c.plate || (name ? 'Vehicle info' : 'Add your car'));
+    $('#carCard').classList.toggle('is-warn', !!next && next.days >= 0 && next.days <= 30);
+    $('#carCard').classList.toggle('is-alert', !!next && next.days < 0);
+
+    $('#carHeroName').textContent = [c.year, name].filter(Boolean).join(' ') || 'My Car';
+    $('#carHeroSub').textContent = [c.plate, miles].filter(Boolean).join(' · ') || 'Add your car’s details';
+    $('#mileageLabel').textContent = `Mileage (${imperial() ? 'miles' : 'km'})`;
+    const url = wallpaper.get();
+    $('#carPhoto').style.backgroundImage = url ? `url("${url}")` : '';
+    $('#carPhoto').classList.toggle('has-photo', !!url);
+    $('#carReminders').innerHTML = rem.length
+      ? rem.map((r) => `<li class="rem${r.days < 0 ? ' is-alert' : r.days <= 30 ? ' is-warn' : ''}"><span>${esc(r.label)}</span><b>${esc(dueText(r.days, r.iso))}</b></li>`).join('')
+      : '<li class="rem-empty">Add service, inspection and insurance dates and DriveDeck will remind you when they’re due.</li>';
+
+    $$('#carForm [name]').forEach((el) => { if (document.activeElement !== el) el.value = c[el.name] || ''; });
+    renderBadge();
   }
 
   // ================================================================== WALLPAPER
@@ -1589,6 +1663,7 @@
       photo.style.backgroundImage = url ? `url("${url}")` : '';
       $('#skyline').hidden = !!url;
       if (!url) skyline.draw();
+      renderCar();
     },
     async pick(file) {
       if (!(file.type || '').startsWith('image/')) { ui.toast('Pick a photo (an image file).'); return; }
@@ -1717,7 +1792,17 @@
       ui.show('map');
       if (!nav.route && !safety.locked()) setTimeout(() => $('#searchInput').focus(), 60);
     });
-    $('#wallpaperBtn').addEventListener('click', () => $('#wallpaperInput').click());
+    $('#carCard').addEventListener('click', () => ui.show('car'));
+    $('#carOpen').addEventListener('click', () => ui.show('car'));
+    $('#carPhotoBtn').addEventListener('click', () => $('#wallpaperInput').click());
+    $('#carForm').addEventListener('submit', (e) => e.preventDefault());
+    $('#carForm').addEventListener('input', (e) => {
+      const el = e.target;
+      if (!CAR_FIELDS.includes(el.name)) return;
+      state.car[el.name] = el.value;
+      save();
+      renderCar();
+    });
     $('#wallpaperPick').addEventListener('click', () => $('#wallpaperInput').click());
     $('#wallpaperReset').addEventListener('click', () => { wallpaper.reset(); renderSettings(); ui.toast('Back to the built-in skyline.'); });
     $('#wallpaperInput').addEventListener('change', async (e) => {
@@ -1975,6 +2060,8 @@
     renderSettings();
     renderBadge();
     wallpaper.apply();
+    renderCar();
+    setInterval(renderCar, 60 * 60e3); // keep "due in N days" current
     safety.apply();
 
     let resizeTimer = null;
