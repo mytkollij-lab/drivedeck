@@ -1611,6 +1611,67 @@
     } catch (e) { /* not available */ }
   }
 
+  // ================================================================== INSTALL AS AN APP
+  // Chrome / Edge offer a one-click install prompt; other browsers get the right instructions.
+  const installer = {
+    prompt: null,
+    installed() {
+      return ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay']
+        .some((m) => window.matchMedia && window.matchMedia(`(display-mode: ${m})`).matches) || navigator.standalone === true;
+    },
+    init() {
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        this.prompt = e;
+        renderInstall();
+      });
+      window.addEventListener('appinstalled', () => {
+        this.prompt = null;
+        ui.toast('DriveDeck is installed. Open it from your desktop, Start menu, Dock or home screen.', 6000);
+        renderInstall();
+      });
+      renderInstall();
+    },
+    async run() {
+      if (this.prompt) {
+        const p = this.prompt;
+        this.prompt = null;
+        p.prompt();
+        await p.userChoice.catch(() => null);
+        renderInstall();
+        return;
+      }
+      ui.toast(this.hint(), 8000);
+    },
+    hint() {
+      const ua = navigator.userAgent;
+      if (/iPhone|iPad|iPod/.test(ua)) return 'In Safari, tap Share, then “Add to Home Screen”.';
+      if (/Android/.test(ua)) return 'Open the browser menu (⋮) and tap “Install app” or “Add to Home screen”.';
+      if (/Firefox\//.test(ua)) return 'Firefox can’t install web apps. Open this page in Chrome or Edge, then press Install.';
+      if (/Macintosh/.test(ua) && /Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) return 'In Safari, choose File › Add to Dock.';
+      return 'Click the install icon at the right end of the address bar, or open the browser menu and choose “Install DriveDeck”.';
+    },
+  };
+  function renderInstall() {
+    const btn = $('#installBtn');
+    const label = $('#installState');
+    if (installer.installed()) {
+      btn.hidden = true;
+      label.textContent = 'Running as an installed app';
+      return;
+    }
+    btn.hidden = false;
+    btn.textContent = installer.prompt ? 'Install' : 'How to install';
+    label.textContent = installer.prompt
+      ? 'Puts DriveDeck on your desktop, Start menu or Dock, in its own window'
+      : 'Add it to your computer or home screen';
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+    navigator.serviceWorker.register('sw.js').catch(() => { /* app still works online */ });
+  }
+
   // ================================================================== WIRING
   function wire() {
     // App rail
@@ -1790,6 +1851,7 @@
       try { localStorage.removeItem(STORE_KEY); } catch (e) { /* noop */ }
       location.reload();
     });
+    $('#installBtn').addEventListener('click', () => installer.run());
     $('#fullscreenBtn').addEventListener('click', () => {
       const el = document.documentElement;
       if (document.fullscreenElement) document.exitFullscreen?.();
@@ -1889,11 +1951,13 @@
 
     homeMap.init();
     initBattery();
+    installer.init();
+    registerServiceWorker();
     gps.start();
     wake.sync();
 
     // Debug/test hook (harmless in production).
-    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, setSetting };
+    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, installer, setSetting };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

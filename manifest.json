@@ -1,13 +1,18 @@
 {
+  "id": "./",
   "name": "DriveDeck",
   "short_name": "DriveDeck",
   "description": "In-car dashboard: maps with turn-by-turn, audio, phone and voice commands.",
   "start_url": "./",
   "scope": "./",
-  "display": "fullscreen",
-  "orientation": "landscape",
-  "background_color": "#0b0b0c",
-  "theme_color": "#0b0b0c",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": [
+    "navigation",
+    "travel",
+    "music"
+  ],
   "icons": [
     {
       "src": "icon-192.png",

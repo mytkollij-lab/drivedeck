@@ -28,6 +28,15 @@ Any static host works too (Netlify, Cloudflare Pages, Render Static Site): publi
 
 To try it on your computer: run `python3 -m http.server 8000` in this folder and open `http://localhost:8000`. Browsers allow GPS on `localhost` without HTTPS.
 
+## Install it as an app
+
+DriveDeck installs straight from the website, with nothing to download. You get an icon on your desktop, Start menu, Dock or home screen, it opens in its own window without browser bars, and it still opens when you're offline (maps, routing and weather need a connection).
+
+- **Windows / Mac, Chrome or Edge:** open the address above and click **Install** in *Settings*, or the install icon at the right end of the address bar.
+- **Mac, Safari:** File › **Add to Dock**.
+- **iPhone / iPad:** Safari › Share › **Add to Home Screen**.
+- **Android:** Chrome menu (⋮) › **Install app**.
+
 ## Running it in the car
 
 1. **Phone or tablet (easiest).** Open your DriveDeck address and choose *Add to Home Screen*. It launches full screen in landscape. Pair the phone to the car over Bluetooth so audio and directions play through the speakers.
@@ -53,7 +62,8 @@ These public servers are fine for personal use, but they have fair-use limits an
 index.html          screen layout
 drive.css           styling (night + day themes, landscape + portrait)
 drive.js            all logic: GPS, nav, voice, audio, phone, safety lock
-manifest.json       installable app (full screen, landscape)
+manifest.json       installable app settings (name, icons, own window)
+sw.js               service worker: lets the installed app open offline
 icon*.png, icon.svg app icons
 vendor/leaflet/     Leaflet 1.9.4 map library (BSD-2-Clause), bundled locally
 vendor/fonts/       Inter (SIL Open Font License), bundled locally
