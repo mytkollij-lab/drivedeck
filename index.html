@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0b0c">
+  <meta name="theme-color" content="#000000">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -11,8 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="preload" href="vendor/fonts/barlow-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="vendor/fonts/barlow-semi-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="drive.css">
 </head>
@@ -54,31 +53,41 @@
     <symbol id="i-snow" viewBox="0 0 24 24"><path d="M7 14.5h10.5a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.6A3.3 3.3 0 0 0 7 14.5z"/><path d="M8.5 18v.01M12 19.5v.01M15.5 18v.01M10 21.5v.01M14 21.5v.01"/></symbol>
     <symbol id="i-storm" viewBox="0 0 24 24"><path d="M7 14.5h10.5a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.6A3.3 3.3 0 0 0 7 14.5z"/><path d="M12.5 15.5l-2.5 3.5h3l-2 3.5"/></symbol>
     <symbol id="i-fog" viewBox="0 0 24 24"><path d="M4 9h16M6 13h12M4 17h16M8 21h8"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><circle cx="6" cy="8" r="1.6" fill="currentColor"/><circle cx="12" cy="8" r="1.6" fill="currentColor"/><circle cx="18" cy="8" r="1.6" fill="currentColor"/><circle cx="6" cy="15" r="1.6" fill="currentColor"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/><circle cx="18" cy="15" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-signal" viewBox="0 0 24 24"><path d="M4 19v-3M9 19v-6M14 19v-9M19 19V5" stroke-width="3"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3l1.9 5.6L18.5 10.5l-5.6 1.9L11 18l-1.9-5.6L3.5 10.5l5.6-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5l4-4.5"/><circle cx="12" cy="14" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.6" stroke-width="3.4" stroke-dasharray="1.9 1.56" stroke-linecap="butt"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2"/></symbol>
   </defs>
 </svg>
 
 <div class="shell">
-  <!-- App rail -->
+  <!-- Dock -->
   <nav class="rail" aria-label="Apps">
-    <div class="rail-clock" id="railClock" aria-hidden="true">--:--</div>
-    <button class="rail-btn is-active" data-view="home" aria-current="page"><span class="app-tile app-home"><svg class="ic"><use href="#i-home"/></svg></span><span class="rail-label">Home</span></button>
-    <button class="rail-btn" data-view="map"><span class="app-tile app-maps"><svg class="ic"><use href="#i-nav"/></svg></span><span class="rail-label">Maps</span></button>
-    <button class="rail-btn" data-view="music"><span class="app-tile app-audio"><svg class="ic"><use href="#i-music"/></svg></span><span class="rail-label">Audio</span></button>
-    <button class="rail-btn" data-view="phone"><span class="app-tile app-phone"><svg class="ic"><use href="#i-phone"/></svg></span><span class="rail-label">Phone</span></button>
-    <button class="rail-btn" data-view="settings"><span class="app-tile app-setup"><svg class="ic"><use href="#i-sliders"/></svg></span><span class="rail-label">Setup</span></button>
+    <div class="rail-status">
+      <div class="rail-clock" id="railClock" aria-hidden="true">--:--</div>
+      <span class="chip" id="netChip" data-state="ok"><svg class="ic"><use href="#i-signal"/></svg><span>Online</span></span>
+      <span class="chip" id="gpsChip" data-state="idle"><i class="dot"></i><span>GPS</span></span>
+      <div class="battery" id="battery" hidden title="Battery"><span class="batt"><i id="battFill"></i></span><span id="battPct"></span></div>
+    </div>
+    <div class="rail-apps">
+      <button class="rail-btn" data-view="map"><span class="app-tile app-maps"><svg class="ic"><use href="#i-nav"/></svg></span><span class="rail-label">Maps</span></button>
+      <button class="rail-btn" data-view="music"><span class="app-tile app-audio"><svg class="ic"><use href="#i-music"/></svg></span><span class="rail-label">Audio</span></button>
+      <button class="rail-btn" data-view="phone"><span class="app-tile app-phone"><svg class="ic"><use href="#i-phone"/></svg></span><span class="rail-label">Phone</span></button>
+      <button class="rail-btn" data-view="settings"><span class="app-tile app-setup"><svg class="ic"><use href="#i-gear"/></svg></span><span class="rail-label">Settings</span></button>
+    </div>
     <button class="mic-btn" id="micBtn" aria-label="Voice command"><svg class="ic"><use href="#i-mic"/></svg></button>
+    <button class="rail-btn rail-home is-active" data-view="home" aria-current="page"><svg class="ic"><use href="#i-grid"/></svg><span class="rail-label">Home</span></button>
   </nav>
 
-  <main class="stage">
-    <!-- Status strip -->
-    <header class="status">
-      <span class="status-clock" id="statusClock">--:--</span>
-      <span class="chip" id="gpsChip" data-state="idle"><i class="dot"></i><span>GPS</span></span>
-      <span class="chip" id="netChip" data-state="ok"><i class="dot"></i><span>Online</span></span>
-      <span class="chip chip-plain" id="tempChip" hidden></span>
-      <span class="status-spacer"></span>
-      <span class="chip chip-plain" id="nowPlayingChip" hidden></span>
-    </header>
+  <main class="stage" id="stage" data-view="home">
+    <!-- Wallpaper: your photo, or a built-in dusk skyline drawn in code -->
+    <div class="wallpaper" aria-hidden="true">
+      <canvas id="skyline"></canvas>
+      <div class="wallpaper-photo" id="wallpaperPhoto" hidden></div>
+      <div class="wallpaper-shade"></div>
+    </div>
 
     <!-- Turn-by-turn banner (visible on every screen while navigating) -->
     <section class="guide" id="guide" hidden aria-live="polite">
@@ -100,84 +109,81 @@
 
     <div class="views">
       <!-- HOME -->
-      <section class="view is-active" id="view-home" aria-label="Home">
-        <div class="home">
-          <article class="tile tile-map">
-            <div class="home-map" id="homeMap" role="button" tabindex="0" aria-label="Open maps"></div>
-            <button class="wx-chip" id="weatherGlance" aria-label="Read the weather aloud">
+      <section class="view view-home is-active" id="view-home" aria-label="Home">
+        <div class="hero">
+          <div class="badge">
+            <div class="badge-title" id="badgeTitle">DriveDeck</div>
+            <div class="badge-sub" id="badgeSub" hidden></div>
+          </div>
+          <div class="hero-info">
+            <button class="hero-wx" id="weatherGlance" aria-label="Read the weather aloud">
               <svg class="ic wx-icon" id="wxIcon"><use href="#i-cloud"/></svg>
-              <span class="wx-text"><span class="wx-temp" id="wxTemp">–</span><span class="wx-desc" id="wxDesc">Needs your location</span></span>
+              <span class="hero-wx-text"><span class="wx-temp" id="wxTemp">–</span><span class="wx-place" id="wxDesc">Locating…</span></span>
             </button>
-            <div class="home-dests" id="homeNav"></div>
-          </article>
+            <span class="hero-div" aria-hidden="true"></span>
+            <div class="hero-time">
+              <div class="hero-date" id="heroDate"></div>
+              <div class="hero-clock" id="heroClock">--:--</div>
+            </div>
+          </div>
+        </div>
 
-          <article class="tile tile-speed">
-            <div class="speed-head">
-              <span class="label">Speed</span>
-              <span class="heading" id="headingVal">–</span>
-            </div>
-            <div class="gauge">
-              <svg class="gauge-svg" viewBox="0 0 300 300" aria-hidden="true">
-                <defs>
-                  <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stop-color="#f5f6f7"/>
-                    <stop offset="0.3" stop-color="#8d9097"/>
-                    <stop offset="0.5" stop-color="#e9eaec"/>
-                    <stop offset="0.75" stop-color="#6c6f75"/>
-                    <stop offset="1" stop-color="#d7d9dc"/>
-                  </linearGradient>
-                  <radialGradient id="dialFace" cx="0.5" cy="0.45" r="0.6">
-                    <stop offset="0" style="stop-color: var(--dial-1)"/>
-                    <stop offset="1" style="stop-color: var(--dial-2)"/>
-                  </radialGradient>
-                  <linearGradient id="gaugeGrad" x1="0" y1="1" x2="1" y2="0">
-                    <stop offset="0" style="stop-color: var(--arc-1)"/>
-                    <stop offset="1" style="stop-color: var(--red)"/>
-                  </linearGradient>
-                </defs>
-                <circle class="g-face" cx="150" cy="150" r="146"/>
-                <circle class="g-bezel" cx="150" cy="150" r="146"/>
-                <circle class="g-track" cx="150" cy="150" r="128" transform="rotate(135 150 150)"/>
-                <circle class="g-redzone" cx="150" cy="150" r="128" transform="rotate(351 150 150)"/>
-                <g id="gaugeTicks"></g>
-                <circle class="g-arc" id="gaugeArc" cx="150" cy="150" r="128" transform="rotate(135 150 150)"/>
-                <g class="g-needle" id="gaugeTip"><path d="M206 150 L268 146.5 L276 150 L268 153.5 Z"/></g>
-                <circle class="g-hub" cx="150" cy="150" r="62"/>
-              </svg>
-              <div class="gauge-center">
-                <span class="speed-val" id="speedVal">0</span>
-                <span class="speed-unit" id="speedUnit">km/h</span>
-              </div>
-            </div>
-            <div class="speed-foot">
-              <span id="gpsAccuracy">Waiting for GPS…</span>
-              <button class="link-btn" id="tripBtn" title="Tap to reset trip">Trip <b id="tripVal">0.0</b></button>
-            </div>
-          </article>
-
-          <article class="tile tile-media">
-            <div class="tile-head"><span class="label" id="homeMediaSource">Audio</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
-            <div class="media-mini">
-              <div class="art art-sm" id="homeArt"><svg class="ic"><use href="#i-music"/></svg></div>
+        <div class="cards">
+          <article class="card card-media">
+            <div class="media-top">
+              <div class="art art-md" id="homeArt"><svg class="ic"><use href="#i-music"/></svg></div>
               <div class="media-meta">
+                <div class="media-label"><span id="homeMediaSource">Now Playing</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
                 <div class="media-title" id="homeTitle">Nothing playing</div>
                 <div class="media-sub" id="homeSub">Add music or a station in Audio</div>
               </div>
             </div>
+            <div class="progress" aria-hidden="true"><i id="homeProgress"></i></div>
             <div class="transport">
               <button class="t-btn" data-media="prev" aria-label="Previous"><svg class="ic"><use href="#i-prev"/></svg></button>
               <button class="t-btn t-main" data-media="toggle" aria-label="Play or pause"><svg class="ic"><use href="#i-play"/></svg></button>
               <button class="t-btn" data-media="next" aria-label="Next"><svg class="ic"><use href="#i-next"/></svg></button>
             </div>
           </article>
+
+          <button class="card card-assist" id="assistCard" aria-label="Talk to the assistant">
+            <svg class="ic assist-glyph"><use href="#i-spark"/></svg>
+            <span class="assist-title">Assistant</span>
+            <span class="assist-sub">Tap to talk</span>
+            <span class="assist-mic"><svg class="ic"><use href="#i-mic"/></svg></span>
+          </button>
+
+          <article class="card card-nav">
+            <div class="home-map" id="homeMap" role="button" tabindex="0" aria-label="Open maps"></div>
+            <div class="card-nav-body" id="homeNav"></div>
+          </article>
+
+          <div class="card-stack">
+            <article class="card mini">
+              <span class="mini-icon"><svg class="ic"><use href="#i-gauge"/></svg></span>
+              <span class="mini-text">
+                <span class="mini-title"><b id="speedVal">0</b> <span id="speedUnit">km/h</span></span>
+                <span class="mini-sub"><span id="headingVal"></span><button class="link-btn" id="tripBtn" title="Tap to reset trip">Trip <b id="tripVal">0.0</b></button></span>
+              </span>
+              <span id="gpsAccuracy" hidden></span>
+            </article>
+            <button class="card mini" id="wallpaperBtn">
+              <span class="mini-icon"><svg class="ic"><use href="#i-image"/></svg></span>
+              <span class="mini-text"><span class="mini-title">Wallpaper</span><span class="mini-sub">Change photo</span></span>
+            </button>
+            <button class="card mini" data-goto="settings">
+              <span class="mini-icon"><svg class="ic"><use href="#i-gear"/></svg></span>
+              <span class="mini-text"><span class="mini-title">Settings</span><span class="mini-sub">Customise</span></span>
+            </button>
+          </div>
         </div>
+        <input type="file" id="wallpaperInput" accept="image/*" hidden>
       </section>
 
       <!-- MAP -->
       <section class="view view-map" id="view-map" aria-label="Maps">
         <div id="map" class="map"></div>
-        <div class="map-vignette" aria-hidden="true"></div>
-        <div class="map-fallback" id="mapFallback" hidden>The map library didn't load. Check your connection and reload.</div>
+                <div class="map-fallback" id="mapFallback" hidden>The map library didn't load. Check your connection and reload.</div>
 
         <div class="map-search">
           <form class="search-bar" id="searchForm" role="search">
@@ -187,6 +193,7 @@
           </form>
           <p class="lock-hint">Typing is paused while you're moving. Tap the mic and say “navigate to…”.</p>
           <ul class="results" id="results" hidden></ul>
+          <div class="quick" id="quickDests"></div>
         </div>
 
         <div class="map-tools">
@@ -303,11 +310,25 @@
             </div>
           </div>
           <div class="set-row">
-            <span>Theme</span>
+            <span>Theme<small>Auto switches with daylight</small></span>
             <div class="seg" role="radiogroup" aria-label="Theme">
               <label><input type="radio" name="theme" value="auto"><span>Auto</span></label>
               <label><input type="radio" name="theme" value="day"><span>Day</span></label>
               <label><input type="radio" name="theme" value="night"><span>Night</span></label>
+            </div>
+          </div>
+          <div class="set-row">
+            <span>Name on screen<small>Shown large on the home screen</small></span>
+            <div class="set-inputs">
+              <input type="text" name="badgeTitle" id="badgeTitleInput" maxlength="24" placeholder="DriveDeck" autocomplete="off" data-lock>
+              <input type="text" name="badgeSub" id="badgeSubInput" maxlength="32" placeholder="Subtitle (optional)" autocomplete="off" data-lock>
+            </div>
+          </div>
+          <div class="set-row">
+            <span>Wallpaper<small id="wallpaperState">Built-in city skyline</small></span>
+            <div class="set-btns">
+              <button class="btn btn-sm" id="wallpaperPick">Choose photo</button>
+              <button class="btn btn-sm" id="wallpaperReset">Use default</button>
             </div>
           </div>
           <div class="set-row">

@@ -25,7 +25,7 @@
   const STORE_KEY = 'drivedeck:v1';
   const guessUnits = () => (/-(US|GB|LR|MM)$/i.test(navigator.language || '') ? 'imperial' : 'metric');
   const DEFAULTS = {
-    settings: { units: guessUnits(), theme: 'night', voiceGuidance: true, wakeLock: true, passenger: false, simulate: false, speechRate: 1 },
+    settings: { units: guessUnits(), theme: 'night', voiceGuidance: true, wakeLock: true, passenger: false, simulate: false, speechRate: 1, badgeTitle: 'DriveDeck', badgeSub: '' },
     favorites: [],
     stations: [],
     places: { home: null, work: null },
@@ -154,6 +154,7 @@
         b.classList.toggle('is-active', on);
         if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
       });
+      $('#stage').dataset.view = name;
       bus.emit('view', name);
     },
     toast(msg, ms = 3000) {
@@ -172,7 +173,7 @@
       }
       const changed = document.documentElement.dataset.theme !== theme;
       document.documentElement.dataset.theme = theme;
-      if (changed) { mapView.onTheme(); homeMap.onTheme(); }
+      if (changed) { mapView.onTheme(); homeMap.onTheme(); skyline.draw(); }
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
       const meta = $('meta[name="theme-color"]');
       if (meta && bg) meta.content = bg;
@@ -355,6 +356,7 @@
         this.isDay = c.is_day == null ? null : c.is_day === 1;
         this.lastAt = Date.now();
         this.lastPos = [lat, lon];
+        this.lookupPlace(lat, lon);
         bus.emit('weather');
         ui.applyTheme();
       } catch (e) {
@@ -362,6 +364,17 @@
       } finally {
         this.loading = false;
       }
+    },
+    placeName: '',
+    async lookupPlace(lat, lon) {
+      try {
+        const params = new URLSearchParams({ format: 'jsonv2', zoom: '10', lat: lat.toFixed(3), lon: lon.toFixed(3), 'accept-language': navigator.language || 'en' });
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
+        if (!res.ok) return;
+        const a = (await res.json()).address || {};
+        this.placeName = a.city || a.town || a.village || a.suburb || a.municipality || a.county || a.state || '';
+        bus.emit('weather');
+      } catch (e) { /* keep showing the condition instead */ }
     },
     describe: (code) => WMO[code] || 'Weather',
     sentence() {
@@ -1139,6 +1152,10 @@
       case 'passenger':
         safety.apply();
         break;
+      case 'badgeTitle':
+      case 'badgeSub':
+        renderBadge();
+        break;
       case 'simulate':
         if (value) sim.start(); else sim.stop();
         break;
@@ -1155,16 +1172,17 @@
     const period = parts.filter((x) => x.type === 'dayPeriod').map((x) => x.value).join('');
     const main = parts.filter((x) => x.type !== 'dayPeriod').map((x) => x.value).join('').trim();
     $('#railClock').innerHTML = `${esc(main)}${period ? `<small>${esc(period)}</small>` : ''}`;
-    $('#statusClock').textContent = `${main}${period ? ` ${period}` : ''}`;
+    $('#heroClock').innerHTML = `${esc(main)}${period ? `<small>${esc(period)}</small>` : ''}`;
+    $('#heroDate').textContent = new Date().toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
-  const GPS_LABEL = { idle: 'GPS off', searching: 'Finding GPS', ok: 'GPS', denied: 'GPS blocked', unsupported: 'No GPS', sim: 'Simulated' };
+  const GPS_LABEL = { idle: 'GPS off', searching: 'GPS…', ok: 'GPS', denied: 'No GPS', unsupported: 'No GPS', sim: 'Sim GPS' };
   function renderGpsStatus() {
     const chip = $('#gpsChip');
     chip.dataset.state = gps.status;
     let label = GPS_LABEL[gps.status] || 'GPS';
-    if (gps.status === 'ok' && gps.pos?.accuracy != null) label = `GPS ±${fmt.accuracy(gps.pos.accuracy)}`;
     chip.querySelector('span').textContent = label;
+    chip.title = gps.status === 'ok' && gps.pos?.accuracy != null ? `Accuracy ±${fmt.accuracy(gps.pos.accuracy)}` : label;
   }
 
   function renderNet() {
@@ -1174,53 +1192,11 @@
     chip.querySelector('span').textContent = on ? 'Online' : 'Offline';
   }
 
-  const GAUGE_LEN = 2 * Math.PI * 128; // circumference of the dial (r = 128 in the SVG)
-  let gaugeUnits = null;
-  const gaugeScale = () => (imperial() ? { max: 120, major: 20, minor: 10 } : { max: 200, major: 40, minor: 10 });
-  let gaugeOverride = null; // forces the needle position during the start-up sweep
-  function buildGaugeTicks() {
-    const g = $('#gaugeTicks');
-    if (!g) return;
-    const { max, major, minor } = gaugeScale();
-    let html = '';
-    for (let v = 0; v <= max; v += minor) {
-      const a = toRad(135 + (270 * v) / max);
-      const isMajor = v % major === 0;
-      const red = v / max >= 0.8 ? ' red' : '';
-      const x = (r) => (150 + r * Math.cos(a)).toFixed(1);
-      const y = (r) => (150 + r * Math.sin(a)).toFixed(1);
-      const r1 = isMajor ? 103 : 109;
-      html += `<line class="g-tick${isMajor ? ' major' : ''}${red}" x1="${x(r1)}" y1="${y(r1)}" x2="${x(116)}" y2="${y(116)}"/>`;
-      if (isMajor) html += `<text class="g-label${red}" x="${x(89)}" y="${y(89)}">${v}</text>`;
-    }
-    g.innerHTML = html;
-    gaugeUnits = state.settings.units;
-  }
-  function renderGauge(ms) {
-    if (!$('#gaugeArc')) return;
-    if (gaugeUnits !== state.settings.units) buildGaugeTicks();
-    const v = Math.max(0, (ms || 0) * (imperial() ? 2.23694 : 3.6));
-    const f = gaugeOverride != null ? gaugeOverride : clamp(v / gaugeScale().max, 0, 1);
-    $('#gaugeArc').style.strokeDasharray = `${(GAUGE_LEN * 0.75 * f).toFixed(2)} ${GAUGE_LEN.toFixed(2)}`;
-    $('#gaugeTip').style.transform = `rotate(${135 + 270 * f}deg)`;
-  }
-  // Like a real cluster on ignition: needle sweeps to the stop and back.
-  function gaugeSweep() {
-    const tile = $('.tile-speed');
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!tile || reduce) return;
-    tile.classList.add('sweeping');
-    setTimeout(() => { gaugeOverride = 1; renderSpeed(); }, 250);
-    setTimeout(() => { gaugeOverride = null; renderSpeed(); }, 1100);
-    setTimeout(() => tile.classList.remove('sweeping'), 1950);
-  }
-
   function renderSpeed() {
     const p = gps.pos;
-    renderGauge(p?.speed);
     $('#speedVal').textContent = fmt.speed(p?.speed);
     $('#speedUnit').textContent = fmt.speedUnit();
-    $('#headingVal').textContent = p?.heading != null ? `${compass(p.heading)} ${Math.round(p.heading)}°` : '–';
+    $('#headingVal').textContent = p?.heading != null ? `${compass(p.heading)} · ` : '';
     let acc = 'Waiting for GPS…';
     if (gps.status === 'denied') acc = 'Location blocked';
     else if (gps.status === 'unsupported') acc = 'No GPS on this device';
@@ -1247,20 +1223,29 @@
           <div class="nav-live-body">
             <div class="nav-live-dist">${u ? fmt.dist(u.dist) : '–'}</div>
             <div class="nav-live-text">${esc(u?.step?.text || 'Starting…')}</div>
-            <div class="nav-live-meta">${esc(nav.dest?.name || '')}${u ? ` · arrive ${fmt.time(u.arrival)} · ${fmt.dist(u.remaining)}` : ''}</div>
           </div>
         </div>`;
-      return;
+    } else {
+      box.innerHTML = '<div class="nav-title">Navigate</div><div class="nav-sub">Where to?</div>';
     }
+    renderQuick();
+  }
+
+  // Home / Work / recent places under the Maps search box.
+  function renderQuick() {
+    const box = $('#quickDests');
+    if (!box) return;
+    const hide = !!nav.route || !$('#results').hidden;
+    box.hidden = hide;
+    if (hide) return;
     const parts = [
-      `<button class="dest dest-search" data-dest="search">${icon('search')}<span class="dest-text"><span class="dest-name">Where to?</span><span class="dest-sub">Search or tap the mic</span></span></button>`,
       destButton('home', state.places.home, 'home', 'Home'),
       destButton('work', state.places.work, 'work', 'Work'),
     ];
     state.recents.slice(0, 4).forEach((d, i) => {
       parts.push(`<button class="dest" data-dest="recent:${i}">${icon('clock')}<span class="dest-text"><span class="dest-name">${esc(d.name)}</span><span class="dest-sub">${esc(d.detail || '')}</span></span></button>`);
     });
-    box.innerHTML = `<div class="dest-row">${parts.join('')}</div>`;
+    box.innerHTML = parts.join('');
   }
 
   function renderGuide() {
@@ -1307,6 +1292,7 @@
 
   function renderResults(list, message) {
     const ul = $('#results');
+    setTimeout(renderQuick, 0);
     if (!list && !message) { ul.hidden = true; ul.innerHTML = ''; return; }
     ul.hidden = false;
     if (message) { ul.innerHTML = `<li class="r-empty">${esc(message)}</li>`; return; }
@@ -1339,10 +1325,7 @@
       $(title).textContent = it ? it.title : 'Nothing playing';
       $(sub).textContent = it ? (it.kind === 'radio' ? 'Live radio' : it.artist) : (art === '#homeArt' ? 'Add music or a station in Audio' : 'Pick a track or station');
     }
-    $('#homeMediaSource').textContent = it ? (it.kind === 'radio' ? 'Radio' : 'On this device') : 'Audio';
-    const chip = $('#nowPlayingChip');
-    chip.hidden = !playing;
-    chip.textContent = playing ? `♪ ${it.title}` : '';
+    $('#homeMediaSource').textContent = it ? (it.kind === 'radio' ? 'Live radio' : 'Now Playing') : 'Now Playing';
     $('#seekWrap').hidden = !(it && it.kind === 'file' && Number.isFinite(media.audio.duration));
 
     // list
@@ -1375,6 +1358,10 @@
 
   function renderMediaTime() {
     const a = media.audio;
+    const bar = $('#homeProgress');
+    const live = media.current?.kind === 'radio';
+    bar.classList.toggle('is-live', live && !a.paused);
+    bar.style.width = live ? '' : `${media.current && a.duration > 0 ? clamp((a.currentTime / a.duration) * 100, 0, 100) : 0}%`;
     if ($('#seekWrap').hidden) return;
     const seek = $('#seek');
     if (!seek.matches(':active')) {
@@ -1415,27 +1402,213 @@
   function renderWeather() {
     const w = weather.data;
     $('#wxIcon use').setAttribute('href', `#i-${weatherIcon(w?.code, weather.isDay)}`);
-    const chip = $('#tempChip');
     if (!w) {
       $('#wxTemp').textContent = '–';
-      $('#wxDesc').textContent = gps.pos ? 'Loading weather…' : 'Needs your location';
-      chip.hidden = true;
+      $('#wxDesc').textContent = gps.pos ? 'Loading…' : 'Locating…';
       return;
     }
-    const t = `${Math.round(w.temp)}${w.tempUnit}`;
-    $('#wxTemp').textContent = t;
-    $('#wxDesc').textContent = `${weather.describe(w.code)} · wind ${Math.round(w.wind)} ${w.windUnit}`;
-    chip.hidden = false;
-    chip.textContent = t;
+    $('#wxTemp').textContent = `${Math.round(w.temp)}°`;
+    $('#wxDesc').textContent = weather.placeName || weather.describe(w.code);
+    $('#weatherGlance').title = `${weather.describe(w.code)}, ${Math.round(w.temp)}${w.tempUnit}, wind ${Math.round(w.wind)} ${w.windUnit}`;
+  }
+
+  function renderBadge() {
+    const t = (state.settings.badgeTitle || '').trim() || 'DriveDeck';
+    const sub = (state.settings.badgeSub || '').trim();
+    $('#badgeTitle').textContent = t;
+    $('#badgeSub').textContent = sub;
+    $('#badgeSub').hidden = !sub;
   }
 
   function renderSettings() {
     const s = state.settings;
+    for (const id of ['badgeTitleInput', 'badgeSubInput']) {
+      const el = $(`#${id}`);
+      if (el && document.activeElement !== el) el.value = s[el.name] || '';
+    }
+    $('#wallpaperState').textContent = wallpaper.get() ? 'Your photo' : 'Built-in city skyline';
     $$('#view-settings input[type="radio"]').forEach((r) => { r.checked = String(s[r.name]) === r.value; });
     $$('#view-settings input[type="checkbox"]').forEach((c) => { c.checked = !!s[c.name]; });
     $('#homePlace').textContent = state.places.home ? state.places.home.name : 'Not set. Search a place and tap Save as Home.';
     $('#workPlace').textContent = state.places.work ? state.places.work.name : 'Not set. Search a place and tap Save as Work.';
     $$('[data-clear-place]').forEach((b) => { b.disabled = !state.places[b.dataset.clearPlace]; });
+  }
+
+  // ================================================================== WALLPAPER
+  // A dusk city skyline drawn in code (default), or a photo the driver picks.
+  const skyline = {
+    draw() {
+      const cv = $('#skyline');
+      if (!cv || cv.hidden) return;
+      const box = cv.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const W = Math.round(box.width * dpr);
+      const H = Math.round(box.height * dpr);
+      cv.width = W; cv.height = H;
+      const g = cv.getContext('2d');
+      const day = themeName() === 'day';
+      let seed = 20261103;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const portrait = H > W;
+      const horizon = H * (portrait ? 0.36 : 0.52);
+      const shore = horizon + H * (portrait ? 0.08 : 0.14);
+      const u = Math.min(H, W * 0.62); // building height unit, so towers stay sane in portrait
+
+      const sky = g.createLinearGradient(0, 0, 0, horizon);
+      (day
+        ? [[0, '#4f86c9'], [0.55, '#8fbbe6'], [1, '#e9dcc8']]
+        : [[0, '#05070e'], [0.5, '#171c33'], [0.74, '#4c2638'], [0.9, '#b8542b'], [1, '#f39a48']]
+      ).forEach(([o, c]) => sky.addColorStop(o, c));
+      g.fillStyle = sky;
+      g.fillRect(0, 0, W, horizon + 2);
+
+      // drifting cloud banks
+      for (let i = 0; i < 26; i++) {
+        const cx = rnd() * W; const cy = horizon * (0.08 + rnd() * 0.8);
+        const rx = W * (0.08 + rnd() * 0.22); const ry = u * (0.012 + rnd() * 0.03);
+        const cg = g.createRadialGradient(cx, cy, 0, cx, cy, rx);
+        const lit = cy > horizon * 0.55;
+        const col = day ? 'rgba(255,255,255,' : (lit ? 'rgba(196,84,52,' : 'rgba(6,8,16,');
+        cg.addColorStop(0, `${col}${day ? 0.55 : (lit ? 0.42 : 0.55)})`);
+        cg.addColorStop(1, `${col}0)`);
+        g.save(); g.translate(cx, cy); g.scale(1, ry / rx); g.translate(-cx, -cy);
+        g.fillStyle = cg; g.beginPath(); g.arc(cx, cy, rx, 0, Math.PI * 2); g.fill(); g.restore();
+      }
+
+      // three layers of buildings, far to near; near ones get lit windows
+      const city = document.createElement('canvas');
+      city.width = W; city.height = Math.ceil(horizon);
+      const c = city.getContext('2d');
+      const layers = day
+        ? [{ col: '#9db0c7', min: 0.03, max: 0.08 }, { col: '#7d90a8', min: 0.04, max: 0.11 }, { col: '#5d6d82', min: 0.03, max: 0.15 }]
+        : [{ col: '#1c1f2e', min: 0.03, max: 0.08 }, { col: '#11131d', min: 0.04, max: 0.11 }, { col: '#07080d', min: 0.03, max: 0.15 }];
+      const lights = [];
+      layers.forEach((layer, li) => {
+        let x = -W * 0.02;
+        while (x < W) {
+          const w = W * (0.014 + rnd() * 0.03);
+          const tall = rnd() < (li === 2 ? 0.08 : 0.04);
+          const h = u * (layer.min + rnd() * (layer.max - layer.min)) * (tall ? 1.9 : 1);
+          const top = horizon - h;
+          c.fillStyle = layer.col;
+          c.fillRect(x, top, w, h + 2);
+          if (tall) { // tapered crown and mast
+            c.beginPath(); c.moveTo(x, top); c.lineTo(x + w / 2, top - h * 0.18); c.lineTo(x + w, top); c.fill();
+            c.fillRect(x + w / 2 - 1 * dpr, top - h * 0.3, 2 * dpr, h * 0.14);
+            if (!day) lights.push({ x: x + w / 2, y: top - h * 0.3, r: 2.2 * dpr, col: 'rgba(255,60,60,0.95)' });
+          }
+          if (li > 0 && !day) {
+            const cw = 1.6 * dpr; const ch = 2.2 * dpr; const gap = 3.4 * dpr;
+            for (let wy = top + gap * 2; wy < horizon - gap; wy += ch + gap) {
+              for (let wx = x + gap; wx < x + w - cw; wx += cw + gap) {
+                if (rnd() < (li === 2 ? 0.16 : 0.07)) {
+                  c.fillStyle = rnd() < 0.8 ? `rgba(255,${190 + Math.floor(rnd() * 40)},120,${0.55 + rnd() * 0.45})` : 'rgba(190,220,255,0.7)';
+                  c.fillRect(wx, wy, cw, ch);
+                }
+              }
+            }
+          }
+          x += w + (rnd() < 0.3 ? W * 0.006 : 0);
+        }
+      });
+      lights.forEach((l) => { c.fillStyle = l.col; c.beginPath(); c.arc(l.x, l.y, l.r, 0, Math.PI * 2); c.fill(); });
+      g.drawImage(city, 0, 0);
+
+      // water with a soft reflection of the city
+      const water = g.createLinearGradient(0, horizon, 0, shore);
+      (day ? [[0, '#6f8fae'], [1, '#3e5670']] : [[0, '#1a1420'], [1, '#05060a']]).forEach(([o, col]) => water.addColorStop(o, col));
+      g.fillStyle = water;
+      g.fillRect(0, horizon, W, shore - horizon);
+      g.save();
+      g.globalAlpha = day ? 0.25 : 0.38;
+      g.translate(0, horizon * 2);
+      g.scale(1, -1);
+      g.drawImage(city, 0, 0, W, horizon, 0, horizon - (shore - horizon), W, shore - horizon);
+      g.restore();
+      // ripples
+      for (let i = 0; i < 90; i++) {
+        const y = horizon + rnd() * (shore - horizon);
+        g.fillStyle = day ? 'rgba(255,255,255,0.18)' : `rgba(255,${150 + Math.floor(rnd() * 80)},100,${0.12 + rnd() * 0.25})`;
+        g.fillRect(rnd() * W, y, W * (0.01 + rnd() * 0.05), 1.2 * dpr);
+      }
+
+      // quayside: wet tarmac catching the city glow
+      const ground = g.createLinearGradient(0, shore, 0, H);
+      (day ? [[0, '#5a6573'], [1, '#2b3139']] : [[0, '#121216'], [0.4, '#09090c'], [1, '#030304']]).forEach(([o, col]) => ground.addColorStop(o, col));
+      g.fillStyle = ground;
+      g.fillRect(0, shore, W, H - shore);
+      g.fillStyle = day ? 'rgba(255,255,255,0.35)' : 'rgba(255,190,120,0.55)';
+      for (let x = W * 0.02; x < W; x += W * 0.06) g.fillRect(x, shore - 1.5 * dpr, 1.5 * dpr, 1.5 * dpr); // railing lights
+      const glare = g.createRadialGradient(W * 0.6, shore + (H - shore) * 0.15, 0, W * 0.6, shore, W * 0.5);
+      glare.addColorStop(0, day ? 'rgba(255,255,255,0.12)' : 'rgba(255,140,70,0.16)');
+      glare.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = glare;
+      g.fillRect(0, shore, W, H - shore);
+    },
+  };
+
+  const WP_KEY = 'drivedeck:wallpaper';
+  const wallpaper = {
+    get() { try { return localStorage.getItem(WP_KEY); } catch (e) { return null; } },
+    apply() {
+      const url = this.get();
+      const photo = $('#wallpaperPhoto');
+      photo.hidden = !url;
+      photo.style.backgroundImage = url ? `url("${url}")` : '';
+      $('#skyline').hidden = !!url;
+      if (!url) skyline.draw();
+    },
+    async pick(file) {
+      if (!(file.type || '').startsWith('image/')) { ui.toast('Pick a photo (an image file).'); return; }
+      let url;
+      try { url = await shrinkImage(file, 1600, 0.82); } catch (e) { ui.toast('Couldn’t read that photo.'); return; }
+      try { localStorage.setItem(WP_KEY, url); } catch (e) { ui.toast('That photo is too big to save. Try a smaller one.'); return; }
+      this.apply();
+      ui.toast('Wallpaper updated.');
+    },
+    reset() {
+      try { localStorage.removeItem(WP_KEY); } catch (e) { /* noop */ }
+      this.apply();
+    },
+  };
+
+  // Downscale a picked photo so it fits comfortably in browser storage.
+  function shrinkImage(file, maxSide, quality) {
+    return new Promise((resolve, reject) => {
+      const src = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.naturalWidth * k));
+        cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(src);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('decode failed')); };
+      img.src = src;
+    });
+  }
+
+  // Phone battery in the dock, where the browser shares it (Chrome on Android does; Safari doesn't).
+  async function initBattery() {
+    if (!navigator.getBattery) return;
+    try {
+      const b = await navigator.getBattery();
+      const update = () => {
+        const pct = Math.round(b.level * 100);
+        $('#battery').hidden = false;
+        $('#battFill').style.width = `${pct}%`;
+        $('#battPct').textContent = `${pct}%`;
+        $('#battery').classList.toggle('is-charging', b.charging);
+        $('#battery').classList.toggle('is-low', b.level < 0.2 && !b.charging);
+      };
+      update();
+      b.addEventListener('levelchange', update);
+      b.addEventListener('chargingchange', update);
+    } catch (e) { /* not available */ }
   }
 
   // ================================================================== WIRING
@@ -1445,6 +1618,19 @@
     $$('[data-goto]').forEach((b) => b.addEventListener('click', () => ui.show(b.dataset.goto)));
     $('#weatherGlance').addEventListener('click', () => commands.reply(weather.sentence()));
     $('#micBtn').addEventListener('click', () => (voice.listening ? voice.close() : voice.open()));
+    $('#assistCard').addEventListener('click', () => voice.open());
+    $('#homeNav').addEventListener('click', () => {
+      ui.show('map');
+      if (!nav.route && !safety.locked()) setTimeout(() => $('#searchInput').focus(), 60);
+    });
+    $('#wallpaperBtn').addEventListener('click', () => $('#wallpaperInput').click());
+    $('#wallpaperPick').addEventListener('click', () => $('#wallpaperInput').click());
+    $('#wallpaperReset').addEventListener('click', () => { wallpaper.reset(); renderSettings(); ui.toast('Back to the built-in skyline.'); });
+    $('#wallpaperInput').addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) { await wallpaper.pick(f); renderSettings(); }
+    });
 
     // Media transport (home + audio screen)
     document.addEventListener('click', (e) => {
@@ -1452,27 +1638,23 @@
       if (b) media[b.dataset.media]();
     });
 
-    // Home: destinations
-    $('#homeNav').addEventListener('click', async (e) => {
+    // Maps: quick destinations (Home / Work / recents)
+    $('#quickDests').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-dest]');
       if (!b) return;
       const key = b.dataset.dest;
-      if (key === 'search') { ui.show('map'); if (!safety.locked()) setTimeout(() => $('#searchInput').focus(), 50); return; }
       let place = null;
       if (key === 'home' || key === 'work') {
         place = state.places[key];
         if (!place) {
-          ui.show('map');
           ui.toast(`Search for your ${key} address, then tap Save as ${key === 'home' ? 'Home' : 'Work'}.`, 4500);
+          if (!safety.locked()) $('#searchInput').focus();
           return;
         }
       } else if (key.startsWith('recent:')) {
         place = state.recents[Number(key.split(':')[1])];
       }
-      if (place) {
-        ui.show('map');
-        await nav.plan(place, { start: true });
-      }
+      if (place) await nav.plan(place, { start: true });
     });
 
     $('#tripBtn').addEventListener('click', () => { gps.trip = 0; renderSpeed(); ui.toast('Trip reset.'); });
@@ -1587,6 +1769,10 @@
     });
 
     // Settings
+    $('#view-settings').addEventListener('input', (e) => {
+      const el = e.target;
+      if (el.name === 'badgeTitle' || el.name === 'badgeSub') setSetting(el.name, el.value);
+    });
     $('#view-settings').addEventListener('change', (e) => {
       const el = e.target;
       if (!el.name) return;
@@ -1692,18 +1878,22 @@
     renderPhone();
     renderWeather();
     renderSettings();
+    renderBadge();
+    wallpaper.apply();
     safety.apply();
 
+    let resizeTimer = null;
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => skyline.draw(), 200); });
     setInterval(renderClock, 1000);
     setInterval(() => { if (state.settings.theme === 'auto') ui.applyTheme(); }, 60e3);
 
     homeMap.init();
-    gaugeSweep();
+    initBattery();
     gps.start();
     wake.sync();
 
     // Debug/test hook (harmless in production).
-    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, setSetting };
+    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, setSetting };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

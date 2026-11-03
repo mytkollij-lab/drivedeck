@@ -2,17 +2,19 @@
 
 DriveDeck is a head-unit style screen for the car. It's a plain static web app (HTML, CSS and JavaScript) that runs in the browser, with no server, no build step and no API keys.
 
-The look is a performance-car cockpit: a carbon-fibre dock of app tiles, graphite panels, and a chrome speedometer with a red zone whose needle sweeps on start-up. Night (carbon) is the default, and Day (brushed aluminium) is in Setup.
+The home screen is a photo dashboard: a full-width wallpaper (a dusk city skyline drawn in code, or **any photo you pick, such as your own car**), your own name in large type, weather with your town, a big clock, and a row of frosted-glass cards (now playing, voice assistant, live navigation map, speed, wallpaper, settings). Night is the default theme; Day is in Settings.
 
 | Screen | What it does |
 | --- | --- |
-| **Home** | Live map card with quick destinations and weather, a speedometer (GPS) with heading and trip meter, and now playing |
+| **Home** | Wallpaper hero with your name, weather, date and clock; cards for now playing, the voice assistant, a live map (tap to navigate), speed and trip, wallpaper and settings |
 | **Maps** | OpenStreetMap with follow mode, place search, routing, **spoken turn-by-turn directions with automatic rerouting**, and hand-off to Google Maps, Waze or Apple Maps |
 | **Audio** | Plays music files from the device and internet radio streams. Bluetooth and steering-wheel buttons work through the Media Session API, and music is lowered while directions are spoken |
 | **Phone** | Favorites and a dial pad. Calls and texts are handed to the phone through `tel:` and `sms:` links |
-| **Setup** | Units, Day/Night/Auto theme (Auto follows actual daylight), voice options, keep-screen-on, passenger mode, and a **simulated drive** for testing at your desk |
+| **Settings** | Name on screen, wallpaper photo, units, Day/Night/Auto theme (Auto follows actual daylight), voice options, keep-screen-on, passenger mode, and a **simulated drive** for testing at your desk |
 
 **Voice commands** use the mic button: *navigate to …*, *take me home*, *how long until we arrive*, *stop navigation*, *play*, *pause*, *next*, *play &lt;station&gt;*, *call &lt;name&gt;*, *text &lt;name&gt;*, *what's the weather*, *open maps*, *night mode*.
+
+**Your data:** settings, favorites, stations and your wallpaper photo are stored only in this browser on this device.
 
 **Driving lock:** above about 10 km/h (6 mph), typing is disabled and the screen asks you to use your voice. Passenger mode turns this off.
 
@@ -41,7 +43,7 @@ To try it on your computer: run `python3 -m http.server 8000` in this folder and
 - Map tiles: CARTO basemaps (dark and light) built on OpenStreetMap data
 - Place search: Nominatim
 - Routing: OSRM public demo server (`router.project-osrm.org`)
-- Weather: Open-Meteo
+- Weather: Open-Meteo (town name from Nominatim)
 
 These public servers are fine for personal use, but they have fair-use limits and no uptime guarantee. CARTO's free basemaps are for non-commercial use. For anything beyond one car, self-host OSRM and a tile server, or switch to a paid provider. The URLs are all in `drive.js`.
 
@@ -54,7 +56,7 @@ drive.js            all logic: GPS, nav, voice, audio, phone, safety lock
 manifest.json       installable app (full screen, landscape)
 icon*.png, icon.svg app icons
 vendor/leaflet/     Leaflet 1.9.4 map library (BSD-2-Clause), bundled locally
-vendor/fonts/       Barlow + Barlow Semi Condensed (SIL Open Font License), bundled locally
+vendor/fonts/       Inter (SIL Open Font License), bundled locally
 ```
 
 ## Why this isn't Apple CarPlay
