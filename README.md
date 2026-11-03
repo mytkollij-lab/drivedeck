@@ -10,7 +10,7 @@ The home screen is a photo dashboard: a full-width wallpaper (a dusk city skylin
 | **Wallpaper photo** | Pick any photo, then drag it to choose which part shows and pinch (or use the slider) to zoom. To reposition later, press and hold the sky on the home screen, or use *Adjust* in Settings or My Car |
 | **My Car** | Your car's model, year, plate, mileage and tyre pressures, with reminders for the service, inspection/MOT and insurance. The home card shows what's due next, and you can ask "when is my service?" |
 | **Maps** | OpenStreetMap with follow mode, place search, routing, **spoken turn-by-turn directions with automatic rerouting**, and hand-off to Google Maps, Waze or Apple Maps |
-| **Audio** | Plays music files from the device and internet radio streams. Bluetooth and steering-wheel buttons work through the Media Session API, and music is lowered while directions are spoken |
+| **Audio** | Plays music files from the device, internet radio streams, and **YouTube Music** playlists, albums and songs (paste a Share link; plays in YouTube's official player, which stays visible as YouTube requires). Bluetooth and steering-wheel buttons work through the Media Session API, and music is lowered while directions are spoken |
 | **Phone** | Favorites and a dial pad. Calls and texts are handed to the phone through `tel:` and `sms:` links |
 | **Settings** | Name on screen, wallpaper photo, units, Day/Night/Auto theme (Auto follows actual daylight), voice options, keep-screen-on, passenger mode, and a **simulated drive** for testing at your desk |
 
@@ -55,6 +55,7 @@ DriveDeck installs straight from the website, with nothing to download. You get 
 - Place search: Nominatim
 - Routing: OSRM public demo server (`router.project-osrm.org`)
 - Weather: Open-Meteo (town name from Nominatim)
+- YouTube Music: YouTube's official IFrame Player (no sign-in; there is no public YouTube Music API)
 
 These public servers are fine for personal use, but they have fair-use limits and no uptime guarantee. OpenStreetMap's tile servers are for light, personal use. For anything beyond one car, self-host OSRM and a tile server, or switch to a paid provider. The URLs are all in `drive.js`.
 

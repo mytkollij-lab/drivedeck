@@ -30,6 +30,7 @@
     settings: { units: guessUnits(), theme: 'night', voiceGuidance: true, wakeLock: true, passenger: false, simulate: false, speechRate: 1, badgeTitle: 'DriveDeck', badgeSub: '' },
     favorites: [],
     stations: [],
+    youtube: [],
     places: { home: null, work: null },
     recents: [],
   };
@@ -40,7 +41,7 @@
     try { raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { raw = null; }
     if (raw && typeof raw === 'object') {
       Object.assign(s.settings, raw.settings || {});
-      for (const k of ['favorites', 'stations', 'recents']) if (Array.isArray(raw[k])) s[k] = raw[k];
+      for (const k of ['favorites', 'stations', 'recents', 'youtube']) if (Array.isArray(raw[k])) s[k] = raw[k];
       if (raw.places && typeof raw.places === 'object') Object.assign(s.places, raw.places);
       if (raw.car && typeof raw.car === 'object') CAR_FIELDS.forEach((k) => { if (typeof raw.car[k] === 'string') s.car[k] = raw.car[k]; });
       if (!raw.v && s.settings.theme === 'auto') s.settings.theme = 'night'; // v2 look defaults to night
@@ -887,8 +888,16 @@
     },
     items(list = this.list) {
       if (list === 'radio') return state.stations.map((s) => ({ id: s.id, title: s.name, artist: 'Radio', src: s.url, kind: 'radio' }));
+      if (list === 'youtube') {
+        return state.youtube.map((y) => ({
+          id: y.id, title: y.name, kind: 'youtube', yt: y,
+          artist: y.kind === 'playlist' ? 'YouTube Music playlist' : 'YouTube Music',
+        }));
+      }
       return this.library;
     },
+    isYouTube() { return this.current?.kind === 'youtube'; },
+    isPlaying() { return this.isYouTube() ? yt.isPlaying() : (!!this.current && !this.audio.paused); },
     playItem(list, i) {
       const items = this.items(list);
       const it = items[i];
@@ -896,6 +905,13 @@
       this.list = list;
       this.index = i;
       this.current = it;
+      if (it.kind === 'youtube') {
+        this.audio.pause();
+        yt.load(it);
+        bus.emit('media');
+        return;
+      }
+      yt.hide();
       this.audio.src = it.src;
       this.audio.play().catch((e) => { if (e.name !== 'AbortError') ui.toast('Tap play to start audio.'); });
       if ('mediaSession' in navigator && 'MediaMetadata' in window) {
@@ -905,22 +921,25 @@
     },
     play() {
       if (!this.current) {
-        for (const list of [this.shownList, this.shownList === 'radio' ? 'library' : 'radio']) {
+        for (const list of [this.shownList, 'library', 'radio', 'youtube']) {
           if (this.items(list).length) { this.playItem(list, 0); return; }
         }
-        ui.toast('Add music files or a radio station first.');
+        ui.toast('Add music, a radio station or a YouTube Music link first.');
         return;
       }
+      if (this.isYouTube()) { yt.play(); return; }
       this.audio.play().catch(() => ui.toast('Tap play to start audio.'));
     },
-    pause() { this.audio.pause(); },
-    toggle() { if (this.audio.paused) this.play(); else this.pause(); },
+    pause() { if (this.isYouTube()) yt.pause(); else this.audio.pause(); },
+    toggle() { if (this.isPlaying()) this.pause(); else this.play(); },
     next() {
+      if (this.isYouTube() && this.current.yt.kind === 'playlist') { yt.next(); return; }
       const items = this.items();
       if (!items.length) return this.play();
       this.playItem(this.list, (this.index + 1) % items.length);
     },
     prev() {
+      if (this.isYouTube() && this.current.yt.kind === 'playlist') { yt.prev(); return; }
       if (this.current?.kind === 'file' && this.audio.currentTime > 4) { this.audio.currentTime = 0; return; }
       const items = this.items();
       if (!items.length) return this.play();
@@ -940,6 +959,10 @@
       if (list === 'radio') {
         state.stations = state.stations.filter((s) => s.id !== id);
         save();
+      } else if (list === 'youtube') {
+        state.youtube = state.youtube.filter((y) => y.id !== id);
+        save();
+        if (this.current && this.current.id === id) yt.hide();
       } else {
         const it = this.library.find((x) => x.id === id);
         if (it) URL.revokeObjectURL(it.src);
@@ -951,7 +974,7 @@
     },
     playByVoice(q, reply) {
       const needle = q.toLowerCase().replace(/^(?:the|some|my)\s+/, '').replace(/\s+(?:station|radio)$/, '');
-      for (const list of ['radio', 'library']) {
+      for (const list of ['radio', 'library', 'youtube']) {
         const i = this.items(list).findIndex((x) => x.title.toLowerCase().includes(needle));
         if (i >= 0) { this.playItem(list, i); return; }
       }
@@ -961,6 +984,125 @@
       if (on === this.ducked) return;
       this.ducked = on;
       this.audio.volume = on ? 0.25 : 1;
+      yt.setVolume(on ? 25 : 100);
+    },
+  };
+
+  // ------------------------------------------------------------------ YouTube Music
+  // Uses YouTube's official IFrame Player. There is no public YouTube Music API for
+  // signing in or controlling the app, so playlists/songs are added by pasting their link.
+  function parseYouTube(text) {
+    let u;
+    try { u = new URL(String(text || '').trim()); } catch (e) { return null; }
+    const host = u.hostname.replace(/^(www|m)\./, '');
+    if (!['youtube.com', 'music.youtube.com', 'youtu.be', 'youtube-nocookie.com'].includes(host)) return null;
+    const ok = (s) => !!s && /^[A-Za-z0-9_-]{6,64}$/.test(s);
+    const list = u.searchParams.get('list');
+    let v = u.searchParams.get('v');
+    if (host === 'youtu.be') v = u.pathname.slice(1).split('/')[0];
+    const m = u.pathname.match(/^\/(?:shorts|embed|live)\/([^/?#]+)/);
+    if (m) v = m[1];
+    if (ok(list)) return { kind: 'playlist', list, v: ok(v) ? v : '' };
+    if (ok(v)) return { kind: 'video', v };
+    return null;
+  }
+  function youTubeMusicUrl(y) {
+    return y.kind === 'playlist'
+      ? `https://music.youtube.com/playlist?list=${encodeURIComponent(y.list)}`
+      : `https://music.youtube.com/watch?v=${encodeURIComponent(y.v)}`;
+  }
+
+  const yt = {
+    player: null,
+    apiPromise: null,
+    ready: false,
+    pending: null,
+    state: -1,
+    title: '',
+    loadApi() {
+      if (window.YT && window.YT.Player) return Promise.resolve();
+      if (this.apiPromise) return this.apiPromise;
+      this.apiPromise = new Promise((resolve, reject) => {
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); resolve(); };
+        const s = document.createElement('script');
+        s.src = 'https://www.youtube.com/iframe_api';
+        s.async = true;
+        s.onerror = () => { this.apiPromise = null; reject(new Error('blocked')); };
+        document.head.appendChild(s);
+      });
+      return this.apiPromise;
+    },
+    async load(item) {
+      this.title = '';
+      $('#ytDock').hidden = false;
+      requestAnimationFrame(() => ytDock.place());
+      try {
+        await this.loadApi();
+      } catch (e) {
+        ui.toast('YouTube couldn’t load. Check your connection, or turn off content blockers for this site.', 6000);
+        return;
+      }
+      if (media.current !== item) return; // switched to something else meanwhile
+      if (!this.player) {
+        this.pending = item;
+        this.player = new window.YT.Player('ytPlayer', {
+          width: '100%',
+          height: '100%',
+          host: 'https://www.youtube-nocookie.com',
+          playerVars: { playsinline: 1, rel: 0 },
+          events: {
+            onReady: () => {
+              this.ready = true;
+              if (this.pending) { this.cue(this.pending); this.pending = null; }
+            },
+            onStateChange: (e) => { this.state = e.data; this.refreshTitle(); bus.emit('media'); },
+            onError: () => ui.toast('That YouTube item can’t play here. It may be private, or its owner only allows it on YouTube.', 6000),
+          },
+        });
+        return;
+      }
+      if (this.ready) this.cue(item); else this.pending = item;
+    },
+    cue(item) {
+      const y = item.yt;
+      if (y.kind === 'playlist') this.player.loadPlaylist({ list: y.list, listType: 'playlist', index: 0 });
+      else this.player.loadVideoById(y.v);
+    },
+    refreshTitle() {
+      try {
+        const d = this.player.getVideoData();
+        if (d && d.title) this.title = d.title;
+      } catch (e) { /* not ready */ }
+    },
+    isPlaying() { return this.state === 1 || this.state === 3; }, // playing or buffering
+    play() { if (this.ready) this.player.playVideo(); },
+    pause() { if (this.ready) this.player.pauseVideo(); },
+    next() { if (this.ready) this.player.nextVideo(); },
+    prev() { if (this.ready) this.player.previousVideo(); },
+    setVolume(v) { if (this.ready && this.player.setVolume) this.player.setVolume(v); },
+    hide() {
+      this.pause();
+      this.pending = null;
+      $('#ytDock').hidden = true;
+    },
+  };
+
+  // Keeps the (never re-parented) player positioned over the Now Playing card of the
+  // current screen, or floating in the corner on screens without one.
+  const ytDock = {
+    place() {
+      const el = $('#ytDock');
+      if (el.hidden) return;
+      const slot = ui.view === 'home' ? $('#ytSlotHome') : (ui.view === 'music' ? $('#ytSlotAudio') : null);
+      const r = slot && slot.offsetParent ? slot.getBoundingClientRect() : null;
+      if (r && r.width >= 200 && r.height >= 120) {
+        el.classList.remove('is-floating');
+        Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      } else {
+        el.classList.add('is-floating');
+        el.style.left = el.style.top = el.style.width = el.style.height = '';
+      }
     },
   };
 
@@ -1353,15 +1495,21 @@
 
   function renderMedia() {
     const it = media.current;
-    const playing = !media.audio.paused && !!it;
+    const playing = media.isPlaying();
+    const isYT = it?.kind === 'youtube';
     document.body.classList.toggle('is-playing', playing);
+    document.body.classList.toggle('yt-active', isYT);
     $$('[data-media="toggle"] use').forEach((u) => u.setAttribute('href', playing ? '#i-pause' : '#i-play'));
     for (const [art, title, sub] of [['#homeArt', '#homeTitle', '#homeSub'], ['#npArt', '#npTitle', '#npSub']]) {
       $(art).innerHTML = artFor(it);
       $(art).style.background = artColor(it);
-      $(title).textContent = it ? it.title : 'Nothing playing';
-      $(sub).textContent = it ? (it.kind === 'radio' ? 'Live radio' : it.artist) : (art === '#homeArt' ? 'Add music or a station in Audio' : 'Pick a track or station');
+      $(title).textContent = it ? ((isYT && yt.title) || it.title) : 'Nothing playing';
+      $(sub).textContent = it ? (it.kind === 'radio' ? 'Live radio' : (isYT ? `YouTube Music · ${it.title}` : it.artist)) : (art === '#homeArt' ? 'Add music or a station in Audio' : 'Pick a track or station');
     }
+    const open = $('#ytOpen');
+    open.hidden = !isYT;
+    if (isYT) open.href = youTubeMusicUrl(it.yt);
+    requestAnimationFrame(() => ytDock.place());
     $('#homeMediaSource').textContent = it ? (it.kind === 'radio' ? 'Live radio' : 'Now Playing') : 'Now Playing';
     $('#seekWrap').hidden = !(it && it.kind === 'file' && Number.isFinite(media.audio.duration));
 
@@ -1374,17 +1522,19 @@
     });
     $('#libraryFoot').hidden = list !== 'library';
     $('#stationForm').hidden = list !== 'radio';
+    $('#ytForm').hidden = list !== 'youtube';
     const items = media.items(list);
     const ul = $('#mediaList');
     if (!items.length) {
-      ul.innerHTML = `<li class="empty">${list === 'radio'
-        ? 'No stations yet. Add a stream URL from your favorite station’s “listen live” page.'
-        : 'No music yet. Add audio files from this device.'}</li>`;
+      ul.innerHTML = `<li class="empty">${({
+        radio: 'No stations yet. Add a stream URL from your favorite station’s “listen live” page.',
+        youtube: 'No YouTube Music yet. Paste a link to a playlist, album or song below.',
+      })[list] || 'No music yet. Add audio files from this device.'}</li>`;
     } else {
       ul.innerHTML = items.map((x, i) => `
         <li>
           <button class="row-main${it && it.id === x.id ? ' is-current' : ''}" data-play="${i}">
-            ${icon(list === 'radio' ? 'radio' : 'music')}
+            ${icon(({ radio: 'radio', youtube: 'play' })[list] || 'music')}
             <span class="row-text"><span class="row-name">${esc(x.title)}</span><span class="row-sub">${esc(list === 'radio' ? x.src : x.artist)}</span></span>
           </button>
           <button class="icon-btn row-del" style="display:grid" data-remove="${esc(x.id)}" aria-label="Remove ${esc(x.title)}">${icon('x')}</button>
@@ -2061,6 +2211,23 @@
       renderMedia();
     });
     $('#seek').addEventListener('input', (e) => { media.audio.currentTime = Number(e.target.value); });
+    $('#ytForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const parsed = parseYouTube($('#ytUrl').value);
+      if (!parsed) {
+        ui.toast('That doesn’t look like a YouTube Music song or playlist link. In YouTube Music use Share › Copy link.', 6000);
+        return;
+      }
+      const name = $('#ytName').value.trim() || (parsed.kind === 'playlist' ? `Playlist ${state.youtube.length + 1}` : `Song ${state.youtube.length + 1}`);
+      state.youtube.push({ id: uid(), name, ...parsed });
+      save();
+      $('#ytUrl').value = '';
+      $('#ytName').value = '';
+      ui.toast(`Added “${name}”. Tap it to play.`);
+      renderMedia();
+    });
+    window.addEventListener('resize', () => ytDock.place());
+    $$('.view').forEach((v) => v.addEventListener('scroll', () => ytDock.place(), { passive: true }));
 
     // Phone
     $('#favForm').addEventListener('submit', (e) => {
@@ -2159,7 +2326,11 @@
       }
     });
     bus.on('gps-status', () => { renderGpsStatus(); renderSpeed(); });
-    bus.on('view', (v) => { if (v === 'map') mapView.onShow(); if (v === 'home') homeMap.onShow(); });
+    bus.on('view', (v) => {
+      if (v === 'map') mapView.onShow();
+      if (v === 'home') homeMap.onShow();
+      requestAnimationFrame(() => ytDock.place());
+    });
     bus.on('routing', (dest) => {
       $('#routeCard').hidden = false;
       $('#routeName').textContent = dest.name;
@@ -2227,7 +2398,7 @@
     wake.sync();
 
     // Debug/test hook (harmless in production).
-    window.DriveDeck = { state, gps, sim, nav, media, commands, ui, weather, wallpaper, photoFrame, installer, setSetting };
+    window.DriveDeck = { state, gps, sim, nav, media, yt, commands, ui, weather, wallpaper, photoFrame, installer, setSetting };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

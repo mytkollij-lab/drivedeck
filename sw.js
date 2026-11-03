@@ -1,7 +1,7 @@
 /* DriveDeck service worker: lets the installed app open without a connection.
    Network first (so updates arrive as soon as you're online), cached copy as fallback.
    Only this app's own files are handled; maps, routing and weather go straight to the network. */
-const CACHE = 'drivedeck-v5';
+const CACHE = 'drivedeck-v6';
 const CORE = [
   './',
   'index.html',

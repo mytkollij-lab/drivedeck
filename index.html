@@ -142,6 +142,7 @@
 
         <div class="cards">
           <article class="card card-media">
+            <div class="yt-slot" id="ytSlotHome" aria-hidden="true"></div>
             <div class="media-top">
               <div class="art art-md" id="homeArt"><svg class="ic"><use href="#i-music"/></svg></div>
               <div class="media-meta">
@@ -271,6 +272,7 @@
       <section class="view" id="view-music" aria-label="Audio">
         <div class="two-col">
           <article class="tile now-playing">
+            <div class="yt-slot yt-slot-lg" id="ytSlotAudio" aria-hidden="true"></div>
             <div class="art art-lg" id="npArt"><svg class="ic"><use href="#i-music"/></svg></div>
             <div class="np-title" id="npTitle">Nothing playing</div>
             <div class="np-sub" id="npSub">Pick a track or station</div>
@@ -284,12 +286,14 @@
               <button class="t-btn t-main" data-media="toggle" aria-label="Play or pause"><svg class="ic"><use href="#i-play"/></svg></button>
               <button class="t-btn" data-media="next" aria-label="Next"><svg class="ic"><use href="#i-next"/></svg></button>
             </div>
+            <a class="btn btn-sm" id="ytOpen" target="_blank" rel="noopener" hidden>Open in YouTube Music</a>
           </article>
 
           <article class="tile list-tile">
             <div class="tabs" role="tablist">
               <button class="tab is-active" role="tab" aria-selected="true" data-list="library"><svg class="ic"><use href="#i-file"/></svg>On this device</button>
               <button class="tab" role="tab" aria-selected="false" data-list="radio"><svg class="ic"><use href="#i-radio"/></svg>Radio</button>
+              <button class="tab" role="tab" aria-selected="false" data-list="youtube"><svg class="ic"><use href="#i-play"/></svg>YouTube Music</button>
             </div>
             <ul class="list" id="mediaList"></ul>
             <div class="list-foot" id="libraryFoot">
@@ -303,6 +307,12 @@
               <input id="stationName" placeholder="Station name" required maxlength="60" data-lock>
               <input id="stationUrl" type="url" placeholder="Stream URL (https://…)" required data-lock>
               <button class="btn" type="submit" data-lock>Add</button>
+            </form>
+            <form class="list-foot inline-form" id="ytForm" hidden>
+              <input id="ytUrl" type="url" placeholder="Paste a YouTube Music link" required data-lock>
+              <input id="ytName" placeholder="Name (optional)" maxlength="60" data-lock>
+              <button class="btn" type="submit" data-lock>Add</button>
+              <p class="fine yt-help">In YouTube Music, open a playlist, album or song, tap <b>Share › Copy link</b>, then paste it here.</p>
             </form>
             <p class="lock-hint">Adding music is paused while you're moving.</p>
           </article>
@@ -431,6 +441,10 @@
     <button class="btn" id="voiceCancel">Close</button>
   </div>
 </div>
+
+<!-- YouTube's official player. YouTube requires it to stay visible while it plays:
+     it sits over the Now Playing card, or floats in the corner on other screens. -->
+<div class="yt-dock" id="ytDock" hidden><div id="ytPlayer"></div></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
