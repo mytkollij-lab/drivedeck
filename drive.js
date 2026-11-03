@@ -677,6 +677,39 @@
   const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> '
     + '&copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
   const themeName = () => (document.documentElement.dataset.theme === 'day' ? 'day' : 'night');
+  const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+
+  // Base map tiles: CARTO's dark/light styles, falling back to standard OpenStreetMap
+  // tiles if CARTO can't be reached (blocked network, content blocker, outage).
+  function addBaseTiles(map) {
+    const layer = L.tileLayer(TILES[themeName()], { maxZoom: 20, subdomains: 'abcd', attribution: TILE_ATTR }).addTo(map);
+    layer.dd = { osm: false, loaded: 0, failed: 0, warned: false };
+    layer.on('tileload', () => {
+      layer.dd.loaded++;
+      map.getContainer().classList.remove('tiles-failed');
+    });
+    layer.on('tileerror', () => {
+      const d = layer.dd;
+      d.failed++;
+      if (!d.osm && d.loaded === 0 && d.failed >= 3) {
+        d.osm = true;
+        d.failed = 0;
+        map.getContainer().classList.add('osm-tiles');
+        if (map.attributionControl) map.attributionControl.removeAttribution(TILE_ATTR).addAttribution(OSM_ATTR);
+        layer.options.maxZoom = 19;
+        layer.setUrl(OSM_URL);
+      } else if (d.osm && d.loaded === 0 && d.failed >= 6 && !d.warned) {
+        d.warned = true;
+        map.getContainer().classList.add('tiles-failed');
+        ui.toast('Map images can’t load. Check your internet connection, or turn off content blockers for this site.', 7000);
+      }
+    });
+    return layer;
+  }
+  function rethemeTiles(layer) {
+    if (layer && !layer.dd.osm) layer.setUrl(TILES[themeName()]);
+  }
   const CAR_HTML = '<div class="car"><svg viewBox="0 0 24 24"><path d="M12 2.5l7.5 18.5-7.5-4.2-7.5 4.2z"/></svg></div>';
 
   function carMarker(ll) {
@@ -723,7 +756,7 @@
         center: p ? [p.lat, p.lon] : [39.5, -98.35],
         zoom: p ? 16 : 4,
       });
-      this.tiles = L.tileLayer(TILES[themeName()], { maxZoom: 20, subdomains: 'abcd', attribution: TILE_ATTR }).addTo(this.map);
+      this.tiles = addBaseTiles(this.map);
       this.map.on('dragstart', () => this.setFollow(false));
       if (p) this.updateCar(p);
       if (nav.route) this.drawRoute(nav.route, nav.dest);
@@ -753,7 +786,7 @@
     },
     onTheme() {
       if (!this.map) return;
-      this.tiles.setUrl(TILES[themeName()]);
+      rethemeTiles(this.tiles);
       if (nav.route) this.drawRoute(nav.route, nav.dest, { fit: false });
     },
     drawRoute(route, dest, { fit = true } = {}) {
@@ -789,7 +822,7 @@
         center: p ? [p.lat, p.lon] : [39.5, -98.35],
         zoom: p ? 15 : 3,
       });
-      this.tiles = L.tileLayer(TILES[themeName()], { maxZoom: 20, subdomains: 'abcd', attribution: TILE_ATTR }).addTo(this.map);
+      this.tiles = addBaseTiles(this.map);
       this.map.on('click', () => ui.show('map'));
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') ui.show('map'); });
       if (p) this.update(p);
@@ -820,7 +853,7 @@
     },
     onTheme() {
       if (!this.map) return;
-      this.tiles.setUrl(TILES[themeName()]);
+      rethemeTiles(this.tiles);
       if (nav.route) this.drawRoute(nav.route, nav.dest);
     },
   };
