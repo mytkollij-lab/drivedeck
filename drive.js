@@ -8,13 +8,14 @@
  *   media    – local files + internet radio, wired to Media Session (steering-wheel keys)
  *   phone    – favorites, dial pad, tel:/sms: hand-off to the phone
  *   voice    – speech recognition + a small command parser, spoken replies
- *   safety   – locks typing while the car is moving
+ *   safety   – locks typing (and the Gridlock game) while the car is moving
+ *   gridlock – the falling-block game screen; the game itself lives in game.js
  */
 (() => {
   'use strict';
 
-  const APP_BUILD = 10;
-  const APP_VERSION = `Build ${APP_BUILD} · 3 Nov 2026`;
+  const APP_BUILD = 11;
+  const APP_VERSION = `Build ${APP_BUILD} · 4 Nov 2026`;
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -35,6 +36,7 @@
     youtube: [],
     places: { home: null, work: null },
     recents: [],
+    game: { best: 0 },
   };
 
   function load() {
@@ -46,6 +48,7 @@
       for (const k of ['favorites', 'stations', 'recents', 'youtube']) if (Array.isArray(raw[k])) s[k] = raw[k];
       if (raw.places && typeof raw.places === 'object') Object.assign(s.places, raw.places);
       if (raw.car && typeof raw.car === 'object') CAR_FIELDS.forEach((k) => { if (typeof raw.car[k] === 'string') s.car[k] = raw.car[k]; });
+      if (raw.game && Number.isFinite(raw.game.best)) s.game.best = raw.game.best;
       if (!raw.v && s.settings.theme === 'auto') s.settings.theme = 'night'; // v2 look defaults to night
     }
     s.v = 2;
@@ -180,7 +183,7 @@
       }
       const changed = document.documentElement.dataset.theme !== theme;
       document.documentElement.dataset.theme = theme;
-      if (changed) { mapView.onTheme(); homeMap.onTheme(); skyline.draw(); }
+      if (changed) { mapView.onTheme(); homeMap.onTheme(); skyline.draw(); if (gridlock) gridlock.retheme(); }
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
       const meta = $('meta[name="theme-color"]');
       if (meta && bg) meta.content = bg;
@@ -1223,8 +1226,24 @@
       document.body.classList.toggle('is-locked', l);
       $$('[data-lock]').forEach((el) => { el.disabled = l; });
       if (l && document.activeElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
+      bus.emit('lock', l);
     },
   };
+
+  // ------------------------------------------------------------------ Gridlock (game)
+  // Created in boot() from game.js. It pauses when you leave the screen and stays paused
+  // while the driving lock is on (Passenger mode lets a passenger play).
+  let gridlock = null;
+  function initGridlock() {
+    const root = $('#gridlock');
+    if (!root || !window.Gridlock) return;
+    gridlock = window.Gridlock.create(root, {
+      isActive: () => ui.view === 'game' && $('#voice').hidden,
+      best: state.game.best,
+      onBest: (score) => { state.game.best = score; save(); },
+    });
+    gridlock.setLocked(safety.locked());
+  }
 
   // ------------------------------------------------------------------ screen wake lock
   const wake = {
@@ -1245,7 +1264,7 @@
   };
 
   // ------------------------------------------------------------------ voice commands
-  const VIEW_ALIASES = { car: 'car', vehicle: 'car', home: 'home', map: 'map', maps: 'map', navigation: 'map', music: 'music', audio: 'music', radio: 'music', phone: 'phone', settings: 'settings', setup: 'settings' };
+  const VIEW_ALIASES = { car: 'car', vehicle: 'car', home: 'home', map: 'map', maps: 'map', navigation: 'map', music: 'music', audio: 'music', radio: 'music', phone: 'phone', settings: 'settings', setup: 'settings', game: 'game', games: 'game', gridlock: 'game' };
 
   const commands = {
     reply(msg) {
@@ -1258,8 +1277,13 @@
       let m;
       if (!text) return;
 
-      if ((m = text.match(/^(?:open|show|go to|switch to)(?: the| my)? (car|vehicle|home|maps?|navigation|music|audio|radio|phone|settings|setup)(?: (?:screen|app|page))?$/))) {
+      if ((m = text.match(/^(?:open|show|go to|switch to)(?: the| my)? (car|vehicle|home|maps?|navigation|music|audio|radio|phone|settings|setup|games?|gridlock)(?: (?:screen|app|page))?$/))) {
         ui.show(VIEW_ALIASES[m[1]]);
+        return;
+      }
+      if (/^(?:play|start)(?: a| the)? (?:game|gridlock)$/.test(text)) {
+        ui.show('game');
+        if (safety.locked()) reply('Gridlock waits until you’ve stopped. A passenger can play with Passenger mode on.');
         return;
       }
       if (/^(?:stop|cancel|end|exit|quit) (?:the )?(?:navigation|navigating|route|directions|guidance)$/.test(text)) {
@@ -2412,6 +2436,7 @@
     bus.on('view', (v) => {
       if (v === 'map') mapView.onShow();
       if (v === 'home') homeMap.onShow();
+      if (gridlock) { if (v === 'game') requestAnimationFrame(() => gridlock.fit()); else gridlock.pause(); }
       requestAnimationFrame(() => ytDock.place());
     });
     bus.on('routing', (dest) => {
@@ -2437,6 +2462,7 @@
     bus.on('media', renderMedia);
     bus.on('media-time', renderMediaTime);
     bus.on('weather', renderWeather);
+    bus.on('lock', (l) => { if (gridlock) gridlock.setLocked(l); });
     bus.on('settings', () => {
       renderSettings();
       renderSpeed();
@@ -2467,6 +2493,7 @@
     wallpaper.apply();
     renderCar();
     setInterval(renderCar, 60 * 60e3); // keep "due in N days" current
+    initGridlock();
     safety.apply();
 
     let resizeTimer = null;
@@ -2485,7 +2512,7 @@
     wake.sync();
 
     // Debug/test hook (harmless in production).
-    window.DriveDeck = { state, gps, sim, nav, media, yt, commands, ui, weather, wallpaper, photoFrame, installer, setSetting };
+    window.DriveDeck = { state, gps, sim, nav, media, yt, commands, ui, weather, wallpaper, photoFrame, installer, setSetting, safety, get gridlock() { return gridlock; } };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

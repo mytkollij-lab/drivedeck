@@ -12,13 +12,14 @@ The home screen is a photo dashboard: a full-width wallpaper (a dusk city skylin
 | **Maps** | OpenStreetMap with follow mode, place search, routing, **spoken turn-by-turn directions with automatic rerouting**, and hand-off to Google Maps, Waze or Apple Maps |
 | **Audio** | Plays music files from the device, internet radio streams, and **YouTube Music** playlists, albums and songs (paste a Share link; plays in YouTube's official player, which stays visible as YouTube requires). Bluetooth and steering-wheel buttons work through the Media Session API, and music is lowered while directions are spoken |
 | **Phone** | Favorites and a dial pad. Calls and texts are handed to the phone through `tel:` and `sms:` links |
+| **Gridlock** | A falling-block puzzle for when you're parked: fill a row to clear it, clear several at once for more points, and every 10 rows the level and speed go up. Play with the on-screen keys, gestures on the well (tap to rotate, drag to move, flick down to drop, flick up to hold) or a keyboard. Your best score is saved. It pauses when you leave the screen and while the car is moving, unless Passenger mode is on |
 | **Settings** | Name on screen, wallpaper photo, units, Day/Night/Auto theme (Auto follows actual daylight), voice options, keep-screen-on, passenger mode, and a **simulated drive** for testing at your desk |
 
-**Voice commands** use the mic button: *navigate to …*, *take me home*, *how long until we arrive*, *stop navigation*, *play*, *pause*, *next*, *play &lt;station&gt;*, *call &lt;name&gt;*, *text &lt;name&gt;*, *what's the weather*, *open maps*, *night mode*.
+**Voice commands** use the mic button: *navigate to …*, *take me home*, *how long until we arrive*, *stop navigation*, *play*, *pause*, *next*, *play &lt;station&gt;*, *call &lt;name&gt;*, *text &lt;name&gt;*, *what's the weather*, *open maps*, *play a game*, *night mode*.
 
-**Your data:** settings, favorites, stations and your wallpaper photo are stored only in this browser on this device.
+**Your data:** settings, favorites, stations, your wallpaper photo and your Gridlock best score are stored only in this browser on this device.
 
-**Driving lock:** above about 10 km/h (6 mph), typing is disabled and the screen asks you to use your voice. Passenger mode turns this off.
+**Driving lock:** above about 10 km/h (6 mph), typing is disabled, Gridlock pauses, and the screen asks you to use your voice. Passenger mode turns this off.
 
 ## Where it lives
 
@@ -65,6 +66,7 @@ These public servers are fine for personal use, but they have fair-use limits an
 index.html          screen layout
 drive.css           styling (night + day themes, landscape + portrait)
 drive.js            all logic: GPS, nav, voice, audio, phone, safety lock
+game.js             Gridlock, the falling-block game (rules, drawing, touch keys and gestures)
 manifest.json       installable app settings (name, icons, own window)
 sw.js               service worker: lets the installed app open offline
 icon*.png, icon.svg app icons
